@@ -1,0 +1,7 @@
+
+.vscode/
+
+lox
+*cmake*
+!CMakeLists.txt
+Makefile

@@ -1,0 +1,29 @@
+%language=C++
+%readonly-tables
+%global-table
+%define hash-function-name keyword_hash
+%define lookup-function-name lookup_keyword
+%define class-name KeywordLookup
+%define lookup-function-name lookup_keyword
+%define slot-name name
+
+struct KeywordEntry { const char* name; TokenType token; };
+
+%%
+and, TokenType::AND
+class, TokenType::CLASS
+else, TokenType::ELSE
+false, TokenType::FALSE
+for, TokenType::FOR
+fun, TokenType::FUN
+if, TokenType::IF
+nil, TokenType::NIL
+or, TokenType::OR
+print, TokenType::PRINT
+return, TokenType::RETURN
+super, TokenType::SUPER
+this, TokenType::THIS
+true, TokenType::TRUE
+var, TokenType::VAR
+while, TokenType::WHILE
+%%
