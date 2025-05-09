@@ -1,7 +1,16 @@
 
 .vscode/
 
-lox
-*cmake*
-!CMakeLists.txt
+build/
+
+.cmake
+CMakeFiles/
+cmake_install.cmake
+CMakeCache.txt
 Makefile
+*.ninja*
+compile_commands.json
+
+perfect_hash.hpp
+
+lox

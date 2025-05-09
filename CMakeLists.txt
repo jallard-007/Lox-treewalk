@@ -10,6 +10,10 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_custom_command(
     OUTPUT ${SRC_DIR}/perfect_hash.hpp
     COMMAND gperf --compare-strncmp -t -L C++ ${SRC_DIR}/keywords.gperf > ${SRC_DIR}/perfect_hash.hpp
+    COMMAND ${CMAKE_COMMAND} -DINPUT=${SRC_DIR}/perfect_hash.hpp
+                             -DOUTPUT=${SRC_DIR}/perfect_hash.hpp
+                             -DTARGET=register
+                             -P ${CMAKE_SOURCE_DIR}/cmake/strip_string.cmake
     DEPENDS ${SRC_DIR}/keywords.gperf
     COMMENT "Generating perfect_hash.hpp from keywords.gperf"
     VERBATIM
