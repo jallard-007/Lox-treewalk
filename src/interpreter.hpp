@@ -5,31 +5,25 @@
 #include <string>
 #include "node.hpp"
 #include "token.hpp"
-
-enum class InterpreterErrorType {
-    Unimplemented,
-    BinOpValuesNotCompatible,
-    MustBeNumbers,
-};
-
-struct InterpreterError {
-    const InterpreterErrorType type;
-    const Token where;
-    const std::string msg;
-    InterpreterError(InterpreterErrorType t, Token where, std::string msg): type{t}, where{where}, msg{std::move(msg)} {}
-    InterpreterError(InterpreterErrorType t, std::string msg): type{t}, where{}, msg{std::move(msg)} {}
-};
+#include "errors.hpp"
+#include "environment.hpp"
 
 struct Interpreter {
+    Environment environment;
+
     std::optional<InterpreterError> execute(const StatementNode&);
     std::expected<Object, InterpreterError> evaluate(const ExpressionNode&);
 
     std::optional<InterpreterError> visit_statement_node(const StatementNode&);
     std::optional<InterpreterError> visit_print_statement_node(const PrintStatementNode&);
     std::optional<InterpreterError> visit_expression_statement_node(const ExpressionStatementNode&);
+    std::optional<InterpreterError> visit_variable_statement_node(const VariableDefStatementNode&);
 
     std::expected<Object, InterpreterError> visit_unary_expr(const UnaryNode&);
     std::expected<Object, InterpreterError> visit_binary_expr(const BinaryNode&);
+    std::expected<Object, InterpreterError> visit_variable_expr(const VariableNode&);
+    std::expected<Object, InterpreterError> visit_assignment_expr(const AssignmentNode&);
+
 
     bool is_truthy(const Object&);
     bool is_equal(const Object&, const Object&);

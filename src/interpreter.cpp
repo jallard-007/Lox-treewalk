@@ -41,9 +41,10 @@ std::optional<InterpreterError> Interpreter::visit_statement_node(const Statemen
     switch (stmt.get_type()) {
         case StatementType::Print: return this->visit_print_statement_node(*stmt.get_print_statement_node());
         case StatementType::Expression: return this->visit_expression_statement_node(*stmt.get_expression_statement_node());
-        default:
-            return InterpreterError(InterpreterErrorType::Unimplemented, "Statement type not implemented");
+        case StatementType::Variable: return this->visit_variable_statement_node(*stmt.get_variable_statement_node());
     }
+    return InterpreterError(InterpreterErrorType::Unimplemented, "Statement type not implemented");
+
 }
 
 
@@ -62,6 +63,21 @@ std::optional<InterpreterError> Interpreter::visit_expression_statement_node(con
     if (!res.has_value()) {
         return res.error();
     }
+    return std::nullopt;
+}
+
+
+std::optional<InterpreterError> Interpreter::visit_variable_statement_node(const VariableDefStatementNode& stmt) {
+    Object value = None();
+    if (stmt.initializer) {
+        auto res = evaluate(*stmt.initializer);
+        if (!res.has_value()) {
+            return res.error();
+        }
+        value = res.value();
+    }
+
+    this->environment.define(stmt.name.lexeme, value);
     return std::nullopt;
 }
 
@@ -171,13 +187,33 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
 }
 
 
+std::expected<Object, InterpreterError> Interpreter::visit_variable_expr(const VariableNode& expr) {
+    return this->environment.get(expr.name);
+}
+
+
+std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const AssignmentNode& expr) {
+    auto value = this->evaluate(*expr.expr);
+    if (!value.has_value()) {
+        return value;
+    }
+    auto err = this->environment.assign(expr.name, value.value());
+    if (err.has_value()) {
+        return std::unexpected(err.value());
+    }
+    return value;
+}
+
+
 std::expected<Object, InterpreterError> Interpreter::evaluate(const ExpressionNode& expr) {
-    const ExpressionType t = expr.get_type();
-    switch (t) {
+    switch (expr.get_type()) {
         case ExpressionType::Literal: return expr.get_literal_node()->value;
         case ExpressionType::BinaryOp: return this->visit_binary_expr(*expr.get_binary_node());
         case ExpressionType::UnaryOp: return this->visit_unary_expr(*expr.get_unary_node());
+        case ExpressionType::Variable: return this->visit_variable_expr(*expr.get_variable_node());
+        case ExpressionType::Assignment: return this->visit_assignment_expr(*expr.get_assignment_node());
     }
+    
 
     return std::unexpected(InterpreterError(InterpreterErrorType::Unimplemented, "Expression type not implemented"));
 }

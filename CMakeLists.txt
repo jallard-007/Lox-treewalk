@@ -20,13 +20,14 @@ add_custom_command(
 )
 
 set(SOURCES
-    ${SRC_DIR}/allocator.cpp
-    ${SRC_DIR}/interpreter.cpp
-    ${SRC_DIR}/lox.cpp
-    ${SRC_DIR}/parser.cpp
-    ${SRC_DIR}/scanner.cpp
-    ${SRC_DIR}/token.cpp
-    ${SRC_DIR}/perfect_hash.hpp # Force dependency on generated file
+    "${SRC_DIR}/allocator.cpp"
+    "${SRC_DIR}/interpreter.cpp"
+    "${SRC_DIR}/environment.cpp"
+    "${SRC_DIR}/lox.cpp"
+    "${SRC_DIR}/parser.cpp"
+    "${SRC_DIR}/scanner.cpp"
+    "${SRC_DIR}/token.cpp"
+    "${SRC_DIR}/perfect_hash.hpp" # Force dependency on generated file
 )
 
 # Create executable target

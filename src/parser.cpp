@@ -7,13 +7,51 @@ Parser::Parser(ASTAllocator allocator, std::vector<Token> tokens): allocator{std
 std::expected<std::vector<StatementNode*>, ParserError> Parser::parse() {
     std::vector<StatementNode*> statements;
     while (!this->is_at_end()) {
-        auto res = this->parse_statement();
+        auto res = this->parse_declaration();
         if (!res.has_value()) {
             return std::unexpected(std::move(res.error()));
         }
         statements.push_back(res.value());
     }
     return statements;
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_declaration() {
+    std::expected<StatementNode*, ParserError> res = this->parse_declaration2();
+    if (!res.has_value()) {
+        this->synchronize();
+    }
+    return res;
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_declaration2() {
+    if (this->match_token({{TokenType::VAR}})) {
+        return this->parse_variable_declaration();
+    } else {
+        return this->parse_statement();
+    }
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_variable_declaration() {
+    auto name = this->consume(TokenType::IDENTIFIER, "Expect variable name.");
+    if (!name.has_value()) {
+        return std::unexpected(name.error());
+    }
+    ExpressionNode* initializer = nullptr;
+    if (this->match_token({{TokenType::EQUAL}})) {
+        auto res = this->parse_expression();
+        if (!res.has_value()) {
+            return std::unexpected(res.error());
+        }
+        initializer = res.value();
+    }
+
+    this->consume(TokenType::SEMICOLON, "Expect ';' after variable declaration.");
+
+    return this->allocator.create<StatementNode>(this->allocator.create<VariableDefStatementNode>(*name.value(), initializer));
 }
 
 
@@ -51,7 +89,30 @@ std::expected<StatementNode*, ParserError> Parser::parse_expression_statement() 
 
 
 std::expected<ExpressionNode*, ParserError> Parser::parse_expression() {
-    return this->parse_equality();
+    return this->parse_assignment();
+}
+
+
+std::expected<ExpressionNode*, ParserError> Parser::parse_assignment() {
+    auto expr = this->parse_equality();
+    if (!expr.has_value())
+        return expr;
+
+    if (this->match_token({{TokenType::EQUAL}})) {
+        const Token& equals = this->previous();
+        auto value = this->parse_assignment();
+        if (!value.has_value())
+            return value;
+
+        if (expr.value()->get_type() == ExpressionType::Variable) {
+            Token& name = expr.value()->get_variable_node()->name;
+            return this->allocator.create<ExpressionNode>((this->allocator.create<AssignmentNode>(name, value.value())));
+        }
+
+        this->error(equals, "Invalid assignment target."); 
+    }
+
+    return expr;
 }
 
 
@@ -61,7 +122,7 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_equality() {
         return expr;
 
     while (this->match_token({{TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL}})) {
-        const Token oper = this->previous();
+        const Token& oper = this->previous();
         auto right = this->parse_comparison();
         if (!right.has_value())
             return right;
@@ -151,6 +212,10 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_primary() {
 
     if (this->match_token({{TokenType::NUMBER, TokenType::STRING}})) {
         return this->allocator.create<ExpressionNode>(this->allocator.create<LiteralNode>(this->previous().val));
+    }
+
+    if (this->match_token({{TokenType::IDENTIFIER}})) {
+        return this->allocator.create<ExpressionNode>(this->allocator.create<VariableNode>(this->previous()));
     }
 
     if (this->match_token({{TokenType::LEFT_PAREN}})) {

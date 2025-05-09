@@ -19,11 +19,19 @@ struct Parser {
 
     std::expected<std::vector<StatementNode*>, ParserError> parse();
 
+    std::expected<StatementNode*, ParserError> parse_declaration();
+    std::expected<StatementNode*, ParserError> parse_declaration2();
+
+    std::expected<StatementNode*, ParserError> parse_variable_declaration();
+
+
     std::expected<StatementNode*, ParserError> parse_statement();
     std::expected<StatementNode*, ParserError> parse_print_statement();
     std::expected<StatementNode*, ParserError> parse_expression_statement();
 
+    
     std::expected<ExpressionNode*, ParserError> parse_expression();
+    std::expected<ExpressionNode*, ParserError> parse_assignment();
     std::expected<ExpressionNode*, ParserError> parse_equality();
     std::expected<ExpressionNode*, ParserError> parse_comparison();
     std::expected<ExpressionNode*, ParserError> parse_term();
@@ -31,9 +39,11 @@ struct Parser {
     std::expected<ExpressionNode*, ParserError> parse_unary();
     std::expected<ExpressionNode*, ParserError> parse_primary();
 
+
     bool match_token(const std::span<const TokenType>);
     bool check_next_token(TokenType);
     bool is_at_end();
+
 
     std::expected<const Token*, ParserError> consume(TokenType, std::string_view);
     const Token& advance();
