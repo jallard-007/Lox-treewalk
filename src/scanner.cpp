@@ -109,7 +109,7 @@ void Scanner::handle_string() {
     // Trim the surrounding quotes.
     auto size = (this->current - 1) - (this->start + 1);
     std::string_view v = this->program.substr(start + 1, size);
-    this->add_token(TokenType::STRING, v);
+    this->add_token(TokenType::STRING, std::string(v));
 }
 
 void Scanner::handle_number() {

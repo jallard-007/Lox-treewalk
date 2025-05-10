@@ -21,9 +21,10 @@ struct Parser {
 
     std::expected<StatementNode*, ParserError> parse_declaration();
     std::expected<StatementNode*, ParserError> parse_declaration2();
+    
+    std::expected<StatementNode*, ParserError> parse_block();
 
     std::expected<StatementNode*, ParserError> parse_variable_declaration();
-
 
     std::expected<StatementNode*, ParserError> parse_statement();
     std::expected<StatementNode*, ParserError> parse_print_statement();
@@ -41,15 +42,15 @@ struct Parser {
 
 
     bool match_token(const std::span<const TokenType>);
-    bool check_next_token(TokenType);
-    bool is_at_end();
+    bool check_next_token(TokenType) const;
+    bool is_at_end() const;
 
 
     std::expected<const Token*, ParserError> consume(TokenType, std::string_view);
     const Token& advance();
-    const Token& peek();
-    const Token& previous();
+    const Token& peek() const;
+    const Token& previous() const;
 
     void synchronize();
-    ParserError error(Token, std::string_view);
+    ParserError error(const Token&, std::string_view) const;
 };

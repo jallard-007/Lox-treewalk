@@ -22,7 +22,7 @@ struct Scanner {
     uint32_t current = 0;
     uint32_t line = 1;
 
-    Scanner(std::string program);
+    explicit Scanner(std::string program);
 
     std::vector<Token> scan();
 

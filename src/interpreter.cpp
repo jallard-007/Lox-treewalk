@@ -18,7 +18,7 @@ std::string stringify(const Object& v) {
         } else if constexpr (std::is_same_v<T, bool>) {
             return vs ? "true" : "false";
         } else if constexpr (std::is_same_v<T, String>) {
-            return std::string(vs);  // assuming String is convertible to std::string
+            return vs;
         } else {
             return "STRINGIFY ERROR: Invalid Token Value!";
         }
@@ -38,29 +38,54 @@ std::optional<InterpreterError> check_number_operands(const Token& oper, const O
 
 
 std::optional<InterpreterError> Interpreter::visit_statement_node(const StatementNode& stmt) {
+    using enum StatementType;
     switch (stmt.get_type()) {
-        case StatementType::Print: return this->visit_print_statement_node(*stmt.get_print_statement_node());
-        case StatementType::Expression: return this->visit_expression_statement_node(*stmt.get_expression_statement_node());
-        case StatementType::Variable: return this->visit_variable_statement_node(*stmt.get_variable_statement_node());
+        case PRINT: return this->visit_print_statement_node(*stmt.get_print_statement_node());
+        case EXPRESSION: return this->visit_expression_statement_node(*stmt.get_expression_statement_node());
+        case VARIABLE: return this->visit_variable_statement_node(*stmt.get_variable_statement_node());
+        case BLOCK: return this->visit_block_statement_node(*stmt.get_block_statement_node());
     }
     return InterpreterError(InterpreterErrorType::Unimplemented, "Statement type not implemented");
+}
 
+
+std::optional<InterpreterError> Interpreter::visit_block_statement_node(const BlockStatementNode& block_stmt) {
+    Environment env {this->environment};
+    return this->execute_block(block_stmt, env);
+}
+
+
+std::optional<InterpreterError> Interpreter::execute_block(const BlockStatementNode& block_stmt, Environment& env) {
+    Environment* enclosing = this->environment;
+    this->environment = &env;
+    for (const auto& stmt : block_stmt.stmts) {
+        auto res = this->execute(*stmt);
+        if (res.has_value()) {
+            this->environment = enclosing;
+            return res;
+        }
+    }
+    this->environment = enclosing;
+    return std::nullopt;
 }
 
 
 std::optional<InterpreterError> Interpreter::visit_print_statement_node(const PrintStatementNode& stmt) {
-    auto res = this->evaluate(*stmt.expr);
+    return this->print_expression(*stmt.expr);
+}
+
+std::optional<InterpreterError> Interpreter::print_expression(const ExpressionNode& expr) {
+    auto res = this->evaluate(expr);
     if (!res.has_value()) {
         return res.error();
     }
-    std::cout << stringify(res.value());
+    std::cout << stringify(res.value()) << '\n';
     return std::nullopt;
 }
 
 
 std::optional<InterpreterError> Interpreter::visit_expression_statement_node(const ExpressionStatementNode& stmt) {
-    auto res = this->evaluate(*stmt.expr);
-    if (!res.has_value()) {
+    if (auto res = this->evaluate(*stmt.expr); !res.has_value()) {
         return res.error();
     }
     return std::nullopt;
@@ -77,7 +102,7 @@ std::optional<InterpreterError> Interpreter::visit_variable_statement_node(const
         value = res.value();
     }
 
-    this->environment.define(stmt.name.lexeme, value);
+    this->environment->define(stmt.name.lexeme, value);
     return std::nullopt;
 }
 
@@ -114,8 +139,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
 
     switch (expr.oper.type) {
         case TokenType::MINUS: {
-            auto err = check_number_operands(expr.oper, left, right);
-            if (err.has_value()) {
+            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) - std::get<double>(right);
@@ -127,50 +151,44 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
             } 
 
             if (std::holds_alternative<String>(left) && std::holds_alternative<String>(right)) {
-                return std::string(std::get<String>(left)) + std::string(std::get<String>(right));
+                return std::get<String>(left) + std::get<String>(right);
             }
 
             return std::unexpected(InterpreterError(InterpreterErrorType::BinOpValuesNotCompatible, expr.oper, "Binary operator values not compatible"));
         }
 
         case TokenType::SLASH: {
-            auto err = check_number_operands(expr.oper, left, right);
-            if (err.has_value()) {
+            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) / std::get<double>(right);
         }
         case TokenType::STAR: {
-            auto err = check_number_operands(expr.oper, left, right);
-            if (err.has_value()) {
+            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) * std::get<double>(right);
         }
         case TokenType::GREATER: {
-            auto err = check_number_operands(expr.oper, left, right);
-            if (err.has_value()) {
+            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) > std::get<double>(right);
         }
         case TokenType::GREATER_EQUAL: {
-            auto err = check_number_operands(expr.oper, left, right);
-            if (err.has_value()) {
+            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) >= std::get<double>(right);
         }
         case TokenType::LESS: {
-            auto err = check_number_operands(expr.oper, left, right);
-            if (err.has_value()) {
+            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) < std::get<double>(right);
         }
         case TokenType::LESS_EQUAL: {
-            auto err = check_number_operands(expr.oper, left, right);
-            if (err.has_value()) {
+            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) <= std::get<double>(right);
@@ -188,7 +206,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
 
 
 std::expected<Object, InterpreterError> Interpreter::visit_variable_expr(const VariableNode& expr) {
-    return this->environment.get(expr.name);
+    return this->environment->get(expr.name);
 }
 
 
@@ -197,8 +215,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const
     if (!value.has_value()) {
         return value;
     }
-    auto err = this->environment.assign(expr.name, value.value());
-    if (err.has_value()) {
+    if (auto err = this->environment->assign(expr.name, value.value()); err.has_value()) {
         return std::unexpected(err.value());
     }
     return value;
@@ -206,12 +223,13 @@ std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const
 
 
 std::expected<Object, InterpreterError> Interpreter::evaluate(const ExpressionNode& expr) {
+    using enum ExpressionType;
     switch (expr.get_type()) {
-        case ExpressionType::Literal: return expr.get_literal_node()->value;
-        case ExpressionType::BinaryOp: return this->visit_binary_expr(*expr.get_binary_node());
-        case ExpressionType::UnaryOp: return this->visit_unary_expr(*expr.get_unary_node());
-        case ExpressionType::Variable: return this->visit_variable_expr(*expr.get_variable_node());
-        case ExpressionType::Assignment: return this->visit_assignment_expr(*expr.get_assignment_node());
+        case LITERAL: return expr.get_literal_node()->value;
+        case BINARYOP: return this->visit_binary_expr(*expr.get_binary_node());
+        case UNARYOP: return this->visit_unary_expr(*expr.get_unary_node());
+        case VARIABLE: return this->visit_variable_expr(*expr.get_variable_node());
+        case ASSIGNMENT: return this->visit_assignment_expr(*expr.get_assignment_node());
     }
     
 
@@ -219,14 +237,14 @@ std::expected<Object, InterpreterError> Interpreter::evaluate(const ExpressionNo
 }
 
 
-bool Interpreter::is_truthy(const Object& v) {
+bool Interpreter::is_truthy(const Object& v) const {
     if (std::holds_alternative<None>(v)) return false;
     if (std::holds_alternative<bool>(v)) return std::get<bool>(v);
     return true;
 }
 
 
-bool Interpreter::is_equal(const Object& a, const Object& b) {
+bool Interpreter::is_equal(const Object& a, const Object& b) const {
     return std::visit([](const auto& lhs, const auto& rhs) -> bool {
         using L = std::decay_t<decltype(lhs)>;
         using R = std::decay_t<decltype(rhs)>;
@@ -239,13 +257,17 @@ bool Interpreter::is_equal(const Object& a, const Object& b) {
 }
 
 
-
-
-void Interpreter::interpret(const std::vector<StatementNode*>& stmts) {
+void Interpreter::interpret(const std::span<StatementNode*>& stmts) {
     for (const auto& stmt : stmts) {
-        auto res = this->execute(*stmt);
-        if (res.has_value()) {
-            Lox::runtime_error(res.value());
+        if (repl_mode && stmt->get_type() == StatementType::EXPRESSION) {
+            if (auto res = this->print_expression(*stmt->get_expression_statement_node()->expr); res.has_value()) {
+                Lox::runtime_error(res.value());
+            }
+        } else {
+            auto res = this->execute(*stmt);
+            if (res.has_value()) {
+                Lox::runtime_error(res.value());
+            }
         }
     }
 }

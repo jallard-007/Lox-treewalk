@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <compare>
 #include <array>
+#include <utility>
 #include <variant>
 #include <string_view>
 #include <string>
@@ -58,7 +59,7 @@ struct None {
 };
 
 using Number = double;
-using String = std::string_view;
+using String = std::string;
 
 using Object = std::variant<None, Number, String, bool>;
 
@@ -76,7 +77,7 @@ std::ostream& operator<<(std::ostream& os, const Object& v);
 std::ostream& operator<<(std::ostream& os, const TokenType& v);
 
 
-constexpr std::array<const char *, static_cast<size_t>(TokenType::_COUNT)> token_map = {
+constexpr std::array<const char *, std::to_underlying(TokenType::_COUNT)> token_map = {
     "and",
     "bang_equal",
     "bang",

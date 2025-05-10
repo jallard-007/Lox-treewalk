@@ -4,16 +4,17 @@
 #include <vector>
 #include <fstream>
 #include <cstdint>
+#include <optional>
 #include "lox.hpp"
 #include "scanner.hpp"
 #include "parser.hpp"
 #include "interpreter.hpp"
 
 
-std::string read_file_to_string(const std::string& filename) {
+std::optional<std::string> read_file_to_string(const std::string& filename) {
     std::ifstream file(filename, std::ios::in | std::ios::binary);  // binary avoids newline conversion on Windows
     if (!file) {
-        throw std::runtime_error("Could not open file: " + std::string(filename));
+        return std::nullopt;
     }
 
     // Read entire file contents into string
@@ -49,27 +50,25 @@ void Lox::runtime_error(const InterpreterError& error) {
 }
 
 
-void Lox::run(std::string program) {
-    Scanner scanner{program};
-    auto tokens = scanner.scan();
-    ASTAllocator allocator = ASTAllocator();
-    Parser parser = Parser(std::move(allocator), tokens);
+void Lox::run(const std::string& program) const {
+    Scanner scanner {program};
+    Parser parser {ASTAllocator(), scanner.scan()};
     auto expr = parser.parse();
 
     // Stop if there was a syntax error.
     if (had_error) return;
-    if (!expr.has_value()) return;
 
     Lox::interpreter.interpret(expr.value());
-    // for (auto& token : tokens) {
-    //     std::cout << token;
-    // }
 }
 
 
-int Lox::run_file(const std::string& file) {
+int Lox::run_file(const std::string& file) const {
     auto file_content = read_file_to_string(file);
-    run(file_content);
+    if (!file_content.has_value()) {
+        std::cout << "Could not open file " << file << '\n';
+        return 60;
+    }
+    run(file_content.value());
 
     if (Lox::had_error) return 65;
     if (Lox::had_runtime_error) return 70;
@@ -77,14 +76,15 @@ int Lox::run_file(const std::string& file) {
 }
 
 
-void Lox::run_prompt() {
+void Lox::run_prompt() const {
+    Lox::interpreter.repl_mode = true;
     std::string line;
     while (true) {
         std::cout << "> ";
         if (!std::getline(std::cin, line)) {
             break; // EOF or error
         }
-        run(std::move(line));
+        run(line);
         Lox::had_error = false;
         Lox::had_runtime_error = false;
         std::cout << '\n';
@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
         std::cout << "usage: " << argv[0] << " [script]\n";
         return -1;
     }
-    Lox lox = Lox();
+    Lox lox {};
     if (argc == 2) {
         return lox.run_file(argv[1]);
     } else {
@@ -109,4 +109,4 @@ int main(int argc, char** argv) {
 
 bool Lox::had_error = false;
 bool Lox::had_runtime_error = false;
-Interpreter Lox::interpreter = Interpreter();
+Interpreter Lox::interpreter {};

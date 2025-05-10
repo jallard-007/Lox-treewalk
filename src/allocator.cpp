@@ -47,16 +47,15 @@ void* ASTAllocator::allocate(std::size_t size, std::size_t alignment) {
     assert(alignment && (alignment & (alignment - 1)) == 0 && "Alignment must be power of 2");
 
     std::size_t space = blockEnd_ - currentPtr_;
-    std::uintptr_t curr = reinterpret_cast<std::uintptr_t>(currentPtr_);
+    auto curr = reinterpret_cast<std::uintptr_t>(currentPtr_);
     std::uintptr_t aligned = (curr + alignment - 1) & ~(alignment - 1);
-    std::size_t padding = aligned - curr;
 
-    if (padding + size > space) {
+    if (std::size_t padding = aligned - curr; padding + size > space) {
         allocateBlock(std::max(blockSize_, size + alignment));
         return allocate(size, alignment);
     }
 
-    void* result = reinterpret_cast<void*>(aligned);
+    auto result = reinterpret_cast<void*>(aligned);
     currentPtr_ = reinterpret_cast<char*>(aligned + size);
     return result;
 }

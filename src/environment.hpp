@@ -22,9 +22,12 @@ struct string_hash
 
 
 class Environment {
+    Environment * const enclosing = nullptr;
     std::unordered_map<std::string, Object, string_hash, std::equal_to<>>values;
 public:
+    Environment() = default;
+    explicit Environment(Environment* enclosing): enclosing{enclosing} {}
     void define(std::string_view, const Object&);
-    std::expected<Object, InterpreterError> get(const Token&);
+    std::expected<Object, InterpreterError> get(const Token&) const;
     std::optional<InterpreterError> assign(const Token&, const Object&);
 };
