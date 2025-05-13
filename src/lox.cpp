@@ -82,6 +82,7 @@ void Lox::run_prompt() const {
     while (true) {
         std::cout << "> ";
         if (!std::getline(std::cin, line)) {
+            std::cout << '\n';
             break; // EOF or error
         }
         run(line);

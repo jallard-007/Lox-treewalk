@@ -8,7 +8,9 @@ enum class InterpreterErrorType {
     Unimplemented,
     BinOpValuesNotCompatible,
     MustBeNumbers,
-    UndefinedVariable
+    UndefinedVariable,
+    NotCallable,
+    Arity
 };
 
 struct InterpreterError {

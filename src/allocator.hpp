@@ -13,7 +13,7 @@ public:
     ASTAllocator(const ASTAllocator&) = delete;
     ASTAllocator& operator=(const ASTAllocator&) = delete;
 
-    ASTAllocator(ASTAllocator&&);
+    ASTAllocator(ASTAllocator&&) noexcept;
     ASTAllocator& operator=(ASTAllocator&&) = delete;
 
     // Construct and return pointer to new object
@@ -44,7 +44,7 @@ T* ASTAllocator::create(Args&&... args) {
     void* mem = allocate(sizeof(T), alignof(T));
     T* obj = new (mem) T(std::forward<Args>(args)...);
 
-    if constexpr (!std::is_trivially_destructible<T>::value) {
+    if constexpr (!std::is_trivially_destructible_v<T>) {
         destructors_.emplace_back([obj]() {
             obj->~T();
         });

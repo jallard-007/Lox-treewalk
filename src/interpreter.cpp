@@ -37,28 +37,32 @@ std::optional<InterpreterError> check_number_operands(const Token& oper, const O
 }
 
 
-std::optional<InterpreterError> Interpreter::visit_statement_node(const StatementNode& stmt) {
+std::optional<InterpreterSignal> Interpreter::visit_statement_node(const StatementNode& stmt) {
     using enum StatementType;
     switch (stmt.get_type()) {
         case PRINT: return this->visit_print_statement_node(*stmt.get_print_statement_node());
         case EXPRESSION: return this->visit_expression_statement_node(*stmt.get_expression_statement_node());
         case VARIABLE: return this->visit_variable_statement_node(*stmt.get_variable_statement_node());
         case BLOCK: return this->visit_block_statement_node(*stmt.get_block_statement_node());
+        case IF: return this->visit_if_statement_node(*stmt.get_if_statement_node());
+        case WHILE: return this->visit_while_statement_node(*stmt.get_while_statement_node());
+        case BREAK: return this->visit_break_statement_node(*stmt.get_break_statement_node());
+        case RETURN: return this->visit_return_statement_node(*stmt.get_return_statement_node());
     }
     return InterpreterError(InterpreterErrorType::Unimplemented, "Statement type not implemented");
 }
 
 
-std::optional<InterpreterError> Interpreter::visit_block_statement_node(const BlockStatementNode& block_stmt) {
+std::optional<InterpreterSignal> Interpreter::visit_block_statement_node(const BlockStatementNode& block_stmt) {
     Environment env {this->environment};
     return this->execute_block(block_stmt, env);
 }
 
 
-std::optional<InterpreterError> Interpreter::execute_block(const BlockStatementNode& block_stmt, Environment& env) {
+std::optional<InterpreterSignal> Interpreter::execute_block(const BlockStatementNode& block_stmt, Environment& env) {
     Environment* enclosing = this->environment;
     this->environment = &env;
-    for (const auto& stmt : block_stmt.stmts) {
+    for (const auto& stmt : *block_stmt.stmts) {
         auto res = this->execute(*stmt);
         if (res.has_value()) {
             this->environment = enclosing;
@@ -104,6 +108,59 @@ std::optional<InterpreterError> Interpreter::visit_variable_statement_node(const
 
     this->environment->define(stmt.name.lexeme, value);
     return std::nullopt;
+}
+
+
+std::optional<InterpreterSignal> Interpreter::visit_if_statement_node(const IfStatementNode& stmt) {
+    auto condition = this->evaluate(*stmt.condition);
+    if (!condition.has_value()) {
+        return condition.error();
+    }
+    if (this->is_truthy(condition.value())) {
+        return this->visit_statement_node(*stmt.then_branch);
+    }
+    if (stmt.else_branch) {
+        return this->visit_statement_node(*stmt.else_branch);
+    }
+
+    return std::nullopt;
+}
+
+
+std::optional<InterpreterSignal> Interpreter::visit_while_statement_node(const WhileStatementNode& stmt) {
+    while (true) {
+        {
+            auto res = this->evaluate(*stmt.condition);
+            if (!res.has_value()) {
+                return res.error();
+            }
+            if (!this->is_truthy(res.value())) {
+                return std::nullopt;
+            }
+        }
+        if (auto res = this->visit_statement_node(*stmt.body); res.has_value()) {
+            if (std::holds_alternative<BreakSignal>(res.value())) {
+                return std::nullopt;
+            }
+            return res;
+        }
+    } 
+}
+
+
+BreakSignal Interpreter::visit_break_statement_node(const BreakStatementNode&) const {
+    return BreakSignal{};
+}
+
+InterpreterSignal Interpreter::visit_return_statement_node(const ReturnStatementNode& stmt) {
+    if (!stmt.expr) {
+        return ReturnSignal{None()};
+    }
+    auto res = this->evaluate(*stmt.expr);
+    if (!res.has_value()) {
+        return res.error();
+    }
+    return ReturnSignal{res.value()};
 }
 
 
@@ -222,6 +279,48 @@ std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const
 }
 
 
+std::expected<Object, InterpreterError> Interpreter::visit_logical_expr(const LogicalNode& expr) {
+    auto left = this->evaluate(*expr.left);
+
+    if (expr.oper.type == TokenType::OR) {
+      if (this->is_truthy(left.value())) return left;
+    } else {
+      if (!this->is_truthy(left.value())) return left;
+    }
+    return evaluate(*expr.right);
+}
+
+
+std::expected<Object, InterpreterError> Interpreter::visit_call_expr(const CallNode& expr) {
+    auto callee = this->evaluate(*expr.callee);
+    if (!callee.has_value()) {
+        return callee;
+    }
+
+    std::vector<Object> arguments;
+    if (expr.args) {
+        for (const ExpressionNode* argument : *expr.args) {
+            auto res = evaluate(*argument);
+            if (!res.has_value()) {
+                return res;
+            }
+            arguments.push_back(res.value());
+        }
+    }
+
+    auto function = std::get_if<LoxCallable*>(&callee.value());
+    if (!function) {
+        return std::unexpected(InterpreterError(InterpreterErrorType::NotCallable, expr.paren, "Can only call functions and classes"));
+    }
+    if (arguments.size() != (*function)->arity()) {
+        return std::unexpected(InterpreterError(InterpreterErrorType::Arity, expr.paren,
+            std::format("Expected {} arguments but got {}.", (*function)->arity(), arguments.size())
+        ));
+    }
+    return (*function)->call(this, arguments);
+}
+
+
 std::expected<Object, InterpreterError> Interpreter::evaluate(const ExpressionNode& expr) {
     using enum ExpressionType;
     switch (expr.get_type()) {
@@ -230,8 +329,9 @@ std::expected<Object, InterpreterError> Interpreter::evaluate(const ExpressionNo
         case UNARYOP: return this->visit_unary_expr(*expr.get_unary_node());
         case VARIABLE: return this->visit_variable_expr(*expr.get_variable_node());
         case ASSIGNMENT: return this->visit_assignment_expr(*expr.get_assignment_node());
+        case LOGICAL: return this->visit_logical_expr(*expr.get_logical_node());
+        case CALL: return this->visit_call_expr(*expr.get_call_node());
     }
-    
 
     return std::unexpected(InterpreterError(InterpreterErrorType::Unimplemented, "Expression type not implemented"));
 }
@@ -263,16 +363,21 @@ void Interpreter::interpret(const std::span<StatementNode*>& stmts) {
             if (auto res = this->print_expression(*stmt->get_expression_statement_node()->expr); res.has_value()) {
                 Lox::runtime_error(res.value());
             }
-        } else {
-            auto res = this->execute(*stmt);
-            if (res.has_value()) {
-                Lox::runtime_error(res.value());
-            }
+            continue;
+        }
+        auto res = this->execute(*stmt);
+        if (res.has_value()) {
+            std::visit([](const auto& v) {
+                using L = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<L, InterpreterError>) {
+                    Lox::runtime_error(v);
+                }
+            }, res.value());
         }
     }
 }
 
 
-std::optional<InterpreterError> Interpreter::execute(const StatementNode& stmt) {
+std::optional<InterpreterSignal> Interpreter::execute(const StatementNode& stmt) {
     return this->visit_statement_node(stmt);
 }

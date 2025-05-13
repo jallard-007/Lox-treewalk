@@ -61,27 +61,32 @@ std::expected<StatementNode*, ParserError> Parser::parse_variable_declaration() 
 
 
 std::expected<StatementNode*, ParserError> Parser::parse_statement() {
-    if (this->match_token({{TokenType::PRINT}})) return this->parse_print_statement();
-    if (this->match_token({{TokenType::LEFT_BRACE}})) return this->parse_block();
+    if (this->match_token({{FOR}})) return this->parse_for_statement();
+    if (this->match_token({{IF}})) return this->parse_if_statement();
+    if (this->match_token({{PRINT}})) return this->parse_print_statement();
+    if (this->match_token({{LEFT_BRACE}})) return this->parse_block();
+    if (this->match_token({{BREAK}})) return this->parse_break_statement();
+    if (this->match_token({{RETURN}})) return this->parse_return_statement();
+    if (this->match_token({{WHILE}})) return this->parse_while_statement();
 
     return parse_expression_statement();
 }
 
 
 std::expected<StatementNode*, ParserError> Parser::parse_block() {
-    std::vector<StatementNode*> statements;
+    auto statements = this->allocator.create<std::vector<StatementNode*>>();
     while (!this->check_next_token(TokenType::RIGHT_BRACE) && !this->is_at_end()) {
         auto res = this->parse_declaration();
         if (!res.has_value()) {
             return std::unexpected(std::move(res.error()));
         }
-        statements.push_back(res.value());
+        statements->push_back(res.value());
     }
     if (auto res = this->consume(TokenType::RIGHT_BRACE, "Expect '}' after block."); !res.has_value()) {
         return std::unexpected(res.error());
     }
 
-    return this->allocator.create<StatementNode>(this->allocator.create<BlockStatementNode>(std::move(statements)));
+    return this->allocator.create<StatementNode>(this->allocator.create<BlockStatementNode>(statements));
 }
 
 
@@ -104,9 +109,160 @@ std::expected<StatementNode*, ParserError> Parser::parse_expression_statement() 
     }
     {
         auto res = this->consume(TokenType::SEMICOLON, "Expect ';' after value.");
-        if (!res.has_value()) return std::unexpected(std::move(res.error()));
+        if (!res.has_value()) return std::unexpected(res.error());
     }
     return this->allocator.create<StatementNode>(this->allocator.create<ExpressionStatementNode>(expr.value()));
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_if_statement() {
+    if (auto res = this->consume(LEFT_PAREN, "Expect '(' after 'if'."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+    auto condition = this->parse_expression();
+    if (auto res = this->consume(RIGHT_PAREN, "Expect ')' after if condition."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+
+    auto then_branch = this->parse_statement();
+    if (!then_branch.has_value()) {
+        return then_branch;
+    }
+
+    StatementNode* else_branch = nullptr;
+    if (this->match_token({{TokenType::ELSE}})) {
+        auto else_branch_res = this->parse_statement();
+        if (!else_branch_res.has_value()) {
+            return else_branch_res;
+        }
+        else_branch = else_branch_res.value();
+    }
+
+    return this->allocator.create<StatementNode>(this->allocator.create<IfStatementNode>(condition.value(), then_branch.value(), else_branch));
+}
+
+std::expected<StatementNode*, ParserError> Parser::parse_while_statement() {
+    if (auto res = this->consume(LEFT_PAREN, "Expect '(' after 'while'."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+    auto condition = this->parse_expression();
+    if (!condition.has_value()) {
+        return std::unexpected(condition.error());
+    }
+    if (auto res = this->consume(RIGHT_PAREN, "Expect ')' after condition."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+    this->loop_depth++;
+    auto body = this->parse_statement();
+    this->loop_depth--;
+    if (!body.has_value()) {
+        return body;
+    }
+
+    return this->allocator.create<StatementNode>(this->allocator.create<WhileStatementNode>(condition.value(), body.value()));
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_for_statement() {
+    if (auto res = this->consume(LEFT_PAREN, "Expect '(' after 'for'."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+    StatementNode* initializer;
+    if (this->match_token({{SEMICOLON}})) {
+        initializer = nullptr;
+    } else if (this->match_token({{VAR}})) {
+        auto ini_res = this->parse_variable_declaration();
+        if (!ini_res.has_value()) {
+            return ini_res;
+        }
+        initializer = ini_res.value();
+    } else {
+        auto ini_res = this->parse_expression_statement();
+        if (!ini_res.has_value()) {
+            return ini_res;
+        }
+        initializer = ini_res.value();
+    }
+
+    ExpressionNode* condition = nullptr;
+    if (!this->check_next_token(SEMICOLON)) {
+        auto expr_res = this->parse_expression();
+        if (!expr_res.has_value()) {
+            return std::unexpected(expr_res.error());
+        }
+        condition = expr_res.value();
+    }
+
+    if (auto res = this->consume(SEMICOLON, "Expect ';' after loop condition."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+
+    ExpressionNode* increment = nullptr;
+    if (!this->check_next_token(SEMICOLON)) {
+        auto expr_res = this->parse_expression();
+        if (!expr_res.has_value()) {
+            return std::unexpected(expr_res.error());
+        }
+        increment = expr_res.value();
+    }
+
+    if (auto res = this->consume(RIGHT_PAREN, "Expect ')' after for clauses."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+
+    this->loop_depth++;
+    auto body_exp = this->parse_statement();
+    this->loop_depth--;
+    if (!body_exp.has_value()) {
+        return body_exp;
+    }
+    StatementNode* body = body_exp.value();
+    if (increment) {
+        auto increment_stmt = this->allocator.create<StatementNode>(this->allocator.create<ExpressionStatementNode>(increment));
+        auto st_list = this->allocator.create<std::vector<StatementNode*>>(std::vector<StatementNode*>({{body, increment_stmt}}));
+        body = this->allocator.create<StatementNode>(this->allocator.create<BlockStatementNode>(st_list));
+    }
+
+    if (!condition) {
+        condition = this->allocator.create<ExpressionNode>(this->allocator.create<LiteralNode>(true));
+    }
+    auto while_stmt = this->allocator.create<StatementNode>(this->allocator.create<WhileStatementNode>(condition, body));
+
+
+    if (initializer) {
+        auto st_list = this->allocator.create<std::vector<StatementNode*>>(std::vector<StatementNode*>({{initializer, body}}));
+        while_stmt = this->allocator.create<StatementNode>(this->allocator.create<BlockStatementNode>(st_list));
+    }
+
+    return while_stmt;
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_break_statement() {
+    if (this->loop_depth == 0) {
+        this->error(this->previous(), "");
+        return std::unexpected(ParserError{});
+    }
+    if (auto res = this->consume(SEMICOLON, "Expect ';' after 'break'."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+    return this->allocator.create<StatementNode>(this->allocator.create<BreakStatementNode>());
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_return_statement() {
+    const Token& rt = this->previous();
+    ExpressionNode* rt_exp = nullptr;
+    if (!this->check_next_token(SEMICOLON)) {
+        auto rt_res = this->parse_expression_statement();
+        if (!rt_res.has_value()) {
+            return std::unexpected(rt_res.error());
+        }
+        rt_exp = rt_res.value()->get_expression_statement_node()->expr;
+    } else {
+        this->advance();
+    }
+    return this->allocator.create<StatementNode>(this->allocator.create<ReturnStatementNode>(rt, rt_exp));
 }
 
 
@@ -116,7 +272,7 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_expression() {
 
 
 std::expected<ExpressionNode*, ParserError> Parser::parse_assignment() {
-    auto expr = this->parse_equality();
+    auto expr = this->parse_logical_or();
     if (!expr.has_value())
         return expr;
 
@@ -132,6 +288,44 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_assignment() {
         }
 
         this->error(equals, "Invalid assignment target."); 
+    }
+
+    return expr;
+}
+
+
+std::expected<ExpressionNode*, ParserError> Parser::parse_logical_or() {
+    auto expr_exp = this->parse_logical_and();
+    if (!expr_exp.has_value())
+        return expr_exp;
+
+    ExpressionNode* expr = expr_exp.value();
+    while (this->match_token({{OR}})) {
+        auto& oper = this->previous();
+        auto right = this->parse_logical_and();
+        if (!right.has_value()) {
+            return right;
+        }
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<LogicalNode>(oper, expr, right.value()));
+    }
+
+    return expr;
+}
+
+
+std::expected<ExpressionNode*, ParserError> Parser::parse_logical_and() {
+    auto expr_exp = this->parse_equality();
+    if (!expr_exp.has_value())
+        return expr_exp;
+    
+    ExpressionNode* expr = expr_exp.value();
+    while (this->match_token({{AND}})) {
+        auto& oper = this->previous();
+        auto right = this->parse_equality();
+        if (!right.has_value()) {
+            return right;
+        }
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<LogicalNode>(oper, expr, right.value()));
     }
 
     return expr;
@@ -193,17 +387,18 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_term() {
 
 
 std::expected<ExpressionNode*, ParserError> Parser::parse_factor() {
-    auto expr = this->parse_unary();
-    if (!expr.has_value())
-        return expr;
+    auto expr_exp = this->parse_unary();
+    if (!expr_exp.has_value())
+        return expr_exp;
 
+    ExpressionNode* expr = expr_exp.value();
     while (this->match_token({{TokenType::MINUS, TokenType::PLUS}})) {
         const Token& oper = previous();
         auto right = this->parse_unary();
         if (!right.has_value())
             return right;
 
-        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(oper, *expr, *right));
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(oper, expr, *right));
     }
 
     return expr;
@@ -220,7 +415,53 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_unary() {
         return this->allocator.create<ExpressionNode>(this->allocator.create<UnaryNode>(oper, *right));
     }
   
-    return this->parse_primary();
+    return this->parse_call();
+}
+
+
+std::expected<ExpressionNode*, ParserError> Parser::parse_call() {
+    auto expr_exp = this->parse_primary();
+    if (!expr_exp.has_value()) {
+        return expr_exp;
+    }
+    
+    ExpressionNode* expr = expr_exp.value();
+    while (true) { 
+        if (this->match_token({{LEFT_PAREN}})) {
+            auto res = this->finish_call(*expr);
+            if (!res.has_value()) {
+                return res;
+            }
+            expr = res.value();
+        } else {
+            break;
+        }
+    }
+
+    return expr;
+}
+
+std::expected<ExpressionNode*, ParserError> Parser::finish_call(ExpressionNode& callee) {
+    auto arguments = this->allocator.create<std::vector<ExpressionNode*>>();
+    if (!this->check_next_token(RIGHT_PAREN)) {
+        do {
+            if (arguments->size() >= 255) {
+                this->error(this->peek(), "Can't have more than 255 arguments.");
+            }
+            auto expr = this->parse_expression();
+            if (!expr.has_value()) {
+                return expr;
+            }
+            arguments->push_back(expr.value());
+        } while (this->match_token({{COMMA}}));
+    }
+
+    auto paren_exp = this->consume(RIGHT_PAREN, "Expect ')' after arguments.");
+    if (!paren_exp.has_value()) {
+        return std::unexpected(paren_exp.error());
+    }
+
+    return this->allocator.create<ExpressionNode>(this->allocator.create<CallNode>(&callee, *paren_exp.value(), arguments));
 }
 
 

@@ -6,6 +6,9 @@
 #include "lox.hpp"
 
 
+using enum TokenType;
+
+
 bool is_digit(char c) {
     return c >= '0' && c <= '9';
 }
@@ -30,7 +33,7 @@ std::vector<Token> Scanner::scan() {
         this->scan_next();
     }
     this->start = this->current;
-    tokens.emplace_back(Token{TokenType::END_OF_FILE, "EOF", None(), this->line});
+    tokens.emplace_back(TokenType::END_OF_FILE, "EOF", None(), this->line);
     return tokens;
 }
 
@@ -38,27 +41,27 @@ std::vector<Token> Scanner::scan() {
 void Scanner::scan_next() {
     char c = this->advance();
     switch (c) {
-        case '(': this->add_token(TokenType::LEFT_PAREN); break;
-        case ')': this->add_token(TokenType::RIGHT_PAREN); break;
-        case '{': this->add_token(TokenType::LEFT_BRACE); break;
-        case '}': this->add_token(TokenType::RIGHT_BRACE); break;
-        case ',': this->add_token(TokenType::COMMA); break;
-        case '.': this->add_token(TokenType::DOT); break;
-        case '-': this->add_token(TokenType::MINUS); break;
-        case '+': this->add_token(TokenType::PLUS); break;
-        case ';': this->add_token(TokenType::SEMICOLON); break;
-        case '*': this->add_token(TokenType::STAR); break; 
+        case '(': this->add_token(LEFT_PAREN); break;
+        case ')': this->add_token(RIGHT_PAREN); break;
+        case '{': this->add_token(LEFT_BRACE); break;
+        case '}': this->add_token(RIGHT_BRACE); break;
+        case ',': this->add_token(COMMA); break;
+        case '.': this->add_token(DOT); break;
+        case '-': this->add_token(MINUS); break;
+        case '+': this->add_token(PLUS); break;
+        case ';': this->add_token(SEMICOLON); break;
+        case '*': this->add_token(STAR); break; 
         case '!':
-            this->add_token(this->match('=') ? TokenType::BANG_EQUAL : TokenType::BANG);
+            this->add_token(this->match('=') ? BANG_EQUAL : BANG);
             break;
         case '=':
-            this->add_token(this->match('=') ? TokenType::EQUAL_EQUAL : TokenType::EQUAL);
+            this->add_token(this->match('=') ? EQUAL_EQUAL : EQUAL);
             break;
         case '<':
-            this->add_token(this->match('=') ? TokenType::LESS_EQUAL : TokenType::LESS);
+            this->add_token(this->match('=') ? LESS_EQUAL : LESS);
             break;
         case '>':
-            this->add_token(this->match('=') ? TokenType::GREATER_EQUAL : TokenType::GREATER);
+            this->add_token(this->match('=') ? GREATER_EQUAL : GREATER);
             break;
         case '/':
             if (this->match('/')) {
@@ -109,7 +112,7 @@ void Scanner::handle_string() {
     // Trim the surrounding quotes.
     auto size = (this->current - 1) - (this->start + 1);
     std::string_view v = this->program.substr(start + 1, size);
-    this->add_token(TokenType::STRING, std::string(v));
+    this->add_token(STRING, std::string(v));
 }
 
 void Scanner::handle_number() {
@@ -124,7 +127,7 @@ void Scanner::handle_number() {
     }
     uint32_t len = this->current - this->start;
     double num = std::stod(std::string(this->program.substr(this->start, len)));
-    this->add_token(TokenType::NUMBER, num);
+    this->add_token(NUMBER, num);
 }
 
 
@@ -134,17 +137,12 @@ void Scanner::handle_identifier() {
     uint32_t len = current - start;
     std::string_view v = this->program.substr(start, len);
     auto kwt = this->get_keyword_type(v);
-    if (kwt) {
-        this->add_token(kwt.value());
-    } else {
-        this->add_token(TokenType::IDENTIFIER);
-    }
+    this->add_token(kwt.value_or(IDENTIFIER));
 }
 
 
 std::optional<TokenType> Scanner::get_keyword_type(std::string_view word) {
-    auto t = KeywordLookup::lookup_keyword(word.data(), word.length());
-    if (t) {
+    if (auto t = KeywordLookup::lookup_keyword(word.data(), word.length()); t) {
         return std::optional<TokenType>(t->token);
     }
     return std::nullopt;
@@ -157,7 +155,7 @@ char Scanner::peek() {
 }
 
 
-char Scanner::peek_next() {
+char Scanner::peek_next() const {
     if (this->current + 1 >= this->program.length()) return '\0';
     return this->program[this->current + 1];
 } 
@@ -172,7 +170,8 @@ bool Scanner::match(char expected) {
 
 
 char Scanner::advance() {
-    return this->program[this->current++];
+    this->current++;
+    return this->program[this->current - 1];
 }
 
 
@@ -183,11 +182,11 @@ void Scanner::add_token(TokenType type) {
 
 void Scanner::add_token(TokenType type, Object literal) {
     auto lexeme = program.substr(start, current - start);
-    tokens.emplace_back(Token{type, lexeme, literal, line});
+    tokens.emplace_back(type, lexeme, std::move(literal), line);
 }
 
 
-bool Scanner::check_at_end() {
+bool Scanner::check_at_end() const {
     return this->current >= this->program.length();
 }
 

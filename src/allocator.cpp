@@ -13,7 +13,7 @@ blockEnd_(nullptr) {}
 
 
 
-ASTAllocator::ASTAllocator(ASTAllocator&& v)
+ASTAllocator::ASTAllocator(ASTAllocator&& v) noexcept
 : blockSize_{v.blockSize_},
 blocks_{std::move(v.blocks_)},
 destructors_{std::move(v.destructors_)},

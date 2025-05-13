@@ -14,6 +14,7 @@ enum class TokenType: uint8_t {
     AND,
     BANG_EQUAL,
     BANG,
+    BREAK,
     CLASS,
     COMMA,
     DOT,
@@ -61,7 +62,18 @@ struct None {
 using Number = double;
 using String = std::string;
 
-using Object = std::variant<None, Number, String, bool>;
+struct LoxCallable;
+
+using Object = std::variant<None, Number, String, bool, LoxCallable*>;
+
+struct Interpreter;
+
+class LoxCallable {
+public:
+    virtual int arity() = 0;
+    virtual Object call(Interpreter*, std::vector<Object>&) = 0;
+    virtual ~LoxCallable() = default;
+};
 
 struct Token {
     TokenType type = TokenType::AND;
@@ -81,6 +93,7 @@ constexpr std::array<const char *, std::to_underlying(TokenType::_COUNT)> token_
     "and",
     "bang_equal",
     "bang",
+    "break",
     "class",
     "comma",
     "dot",

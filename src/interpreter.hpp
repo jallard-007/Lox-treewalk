@@ -8,6 +8,14 @@
 #include "errors.hpp"
 #include "environment.hpp"
 
+
+struct BreakSignal {};
+struct ReturnSignal {
+    Object value;
+};
+
+using InterpreterSignal = std::variant<InterpreterError, BreakSignal, ReturnSignal>;
+
 struct Interpreter {
     Environment global_env {};
     Environment* environment;
@@ -17,22 +25,28 @@ struct Interpreter {
     Interpreter(): environment{&this->global_env} {}
     explicit Interpreter(bool repl_mode): environment{&this->global_env}, repl_mode{repl_mode} {}
 
-    std::optional<InterpreterError> execute(const StatementNode&);
-    std::optional<InterpreterError> execute_block(const BlockStatementNode&, Environment&);
-    std::expected<Object, InterpreterError> evaluate(const ExpressionNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> execute(const StatementNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> execute_block(const BlockStatementNode&, Environment&);
+    [[nodiscard]] std::expected<Object, InterpreterError> evaluate(const ExpressionNode&);
 
-    std::optional<InterpreterError> visit_statement_node(const StatementNode&);
-    std::optional<InterpreterError> visit_print_statement_node(const PrintStatementNode&);
-    std::optional<InterpreterError> visit_expression_statement_node(const ExpressionStatementNode&);
-    std::optional<InterpreterError> visit_variable_statement_node(const VariableDefStatementNode&);
-    std::optional<InterpreterError> visit_block_statement_node(const BlockStatementNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> visit_statement_node(const StatementNode&);
+    [[nodiscard]] std::optional<InterpreterError> visit_print_statement_node(const PrintStatementNode&);
+    [[nodiscard]] std::optional<InterpreterError> visit_expression_statement_node(const ExpressionStatementNode&);
+    [[nodiscard]] std::optional<InterpreterError> visit_variable_statement_node(const VariableDefStatementNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> visit_block_statement_node(const BlockStatementNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> visit_if_statement_node(const IfStatementNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> visit_while_statement_node(const WhileStatementNode&);
+    [[nodiscard]] BreakSignal visit_break_statement_node(const BreakStatementNode&) const;
+    [[nodiscard]] InterpreterSignal visit_return_statement_node(const ReturnStatementNode&);
 
-    std::expected<Object, InterpreterError> visit_unary_expr(const UnaryNode&);
-    std::expected<Object, InterpreterError> visit_binary_expr(const BinaryNode&);
-    std::expected<Object, InterpreterError> visit_variable_expr(const VariableNode&);
-    std::expected<Object, InterpreterError> visit_assignment_expr(const AssignmentNode&);
+    [[nodiscard]] std::expected<Object, InterpreterError> visit_unary_expr(const UnaryNode&);
+    [[nodiscard]] std::expected<Object, InterpreterError> visit_binary_expr(const BinaryNode&);
+    [[nodiscard]] std::expected<Object, InterpreterError> visit_variable_expr(const VariableNode&);
+    [[nodiscard]] std::expected<Object, InterpreterError> visit_assignment_expr(const AssignmentNode&);
+    [[nodiscard]] std::expected<Object, InterpreterError> visit_logical_expr(const LogicalNode&);
+    [[nodiscard]] std::expected<Object, InterpreterError> visit_call_expr(const CallNode&);
 
-    std::optional<InterpreterError> print_expression(const ExpressionNode&);
+    [[nodiscard]] std::optional<InterpreterError> print_expression(const ExpressionNode&);
 
     bool is_truthy(const Object&) const;
     bool is_equal(const Object&, const Object&) const;

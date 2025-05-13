@@ -37,7 +37,7 @@ struct Scanner {
     bool match(char expected);
 
     char peek();
-    char peek_next();
+    char peek_next() const;
 
     char advance();
 
@@ -45,7 +45,7 @@ struct Scanner {
 
     void add_token(TokenType type, Object literal);
 
-    bool check_at_end();
+    bool check_at_end() const;
 
     std::optional<TokenType> get_keyword_type(std::string_view word);
 
