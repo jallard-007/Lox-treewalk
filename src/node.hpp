@@ -176,7 +176,7 @@ struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) ReturnStatementNode {
 struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) FunctionDeclarationNode {
     Token* name;
     std::vector<Token*>* params;
-    StatementNode* body;
+    BlockStatementNode* body;
 };
 
 

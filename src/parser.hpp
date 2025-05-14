@@ -16,28 +16,28 @@ struct Parser {
     std::vector<StatementNode*>& statements;
     size_t current = 0;
     uint32_t loop_depth = 0;
-  
+
     Parser(Program&);
 
     void parse();
 
     [[nodiscard]] StatementNode* parse_declaration();
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_declaration2();
-    
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_block();
 
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_variable_declaration();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_function_declaration(std::string_view);
+    [[nodiscard]] std::expected<BlockStatementNode*, ParserError> parse_block();
+
+    [[nodiscard]] std::expected<VariableDeclarationNode*, ParserError> parse_variable_declaration();
+    [[nodiscard]] std::expected<FunctionDeclarationNode*, ParserError> parse_function_declaration(std::string_view);
 
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_statement();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_print_statement();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_expression_statement();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_if_statement();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_while_statement();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_for_statement();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_break_statement();
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_return_statement();
-    
+    [[nodiscard]] std::expected<PrintStatementNode*, ParserError> parse_print_statement();
+    [[nodiscard]] std::expected<ExpressionStatementNode*, ParserError> parse_expression_statement();
+    [[nodiscard]] std::expected<IfStatementNode*, ParserError> parse_if_statement();
+    [[nodiscard]] std::expected<WhileStatementNode*, ParserError> parse_while_statement();
+    [[nodiscard]] std::expected<BlockStatementNode*, ParserError> parse_for_statement();
+    [[nodiscard]] std::expected<BreakStatementNode*, ParserError> parse_break_statement();
+    [[nodiscard]] std::expected<ReturnStatementNode*, ParserError> parse_return_statement();
+
     [[nodiscard]] std::expected<ExpressionNode*, ParserError> parse_expression();
     [[nodiscard]] std::expected<ExpressionNode*, ParserError> parse_assignment();
     [[nodiscard]] std::expected<ExpressionNode*, ParserError> parse_logical_or();

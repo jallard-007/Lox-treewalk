@@ -1,5 +1,7 @@
 #include <optional>
 #include "interpreter.hpp"
+#include "lox_callable.hpp"
+#include "lox_builtins.hpp"
 #include "lox.hpp"
 
 
@@ -36,6 +38,11 @@ std::optional<InterpreterError> check_number_operands(const Token& oper, const O
     return InterpreterError(InterpreterErrorType::MustBeNumbers, oper, "Operands must be numbers.");
 }
 
+
+Interpreter::Interpreter(): environment{&this->global_env} {
+    this->global_env.define("clock", std::make_shared<ClockCallable>()); 
+}
+Interpreter::Interpreter(bool repl_mode): environment{&this->global_env}, repl_mode{repl_mode} {}
 
 std::optional<InterpreterSignal> Interpreter::visit_statement_node(const StatementNode& stmt) {
     using enum StatementType;
@@ -75,11 +82,11 @@ std::optional<InterpreterSignal> Interpreter::execute_block(const BlockStatement
 }
 
 
-std::optional<InterpreterError> Interpreter::visit_print_statement_node(const PrintStatementNode& stmt) {
+std::optional<InterpreterSignal> Interpreter::visit_print_statement_node(const PrintStatementNode& stmt) {
     return this->print_expression(*stmt.expr);
 }
 
-std::optional<InterpreterError> Interpreter::print_expression(const ExpressionNode& expr) {
+std::optional<InterpreterSignal> Interpreter::print_expression(const ExpressionNode& expr) {
     auto res = this->evaluate(expr);
     if (!res.has_value()) {
         return res.error();
@@ -89,7 +96,7 @@ std::optional<InterpreterError> Interpreter::print_expression(const ExpressionNo
 }
 
 
-std::optional<InterpreterError> Interpreter::visit_expression_statement_node(const ExpressionStatementNode& stmt) {
+std::optional<InterpreterSignal> Interpreter::visit_expression_statement_node(const ExpressionStatementNode& stmt) {
     if (auto res = this->evaluate(*stmt.expr); !res.has_value()) {
         return res.error();
     }
@@ -97,7 +104,7 @@ std::optional<InterpreterError> Interpreter::visit_expression_statement_node(con
 }
 
 
-std::optional<InterpreterError> Interpreter::visit_variable_declaration_node(const VariableDeclarationNode& stmt) {
+std::optional<InterpreterSignal> Interpreter::visit_variable_declaration_node(const VariableDeclarationNode& stmt) {
     Object value = None();
     if (stmt.initializer) {
         auto res = evaluate(*stmt.initializer);
@@ -165,11 +172,12 @@ InterpreterSignal Interpreter::visit_return_statement_node(const ReturnStatement
 }
 
 std::optional<InterpreterSignal> Interpreter::visit_function_declaration_node(const FunctionDeclarationNode& func) {
+    this->environment->define(func.name->lexeme, std::make_shared<LoxFunction>(func));
     return std::nullopt;
 }
 
 
-std::expected<Object, InterpreterError> Interpreter::visit_unary_expr(const UnaryNode& expr) {
+std::expected<Object, InterpreterSignal> Interpreter::visit_unary_expr(const UnaryNode& expr) {
     auto right_exp = this->evaluate(*expr.operand);
     if (!right_exp.has_value()) {
         return right_exp;
@@ -187,7 +195,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_unary_expr(const Unar
 }
 
 
-std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const BinaryNode& expr) {
+std::expected<Object, InterpreterSignal> Interpreter::visit_binary_expr(const BinaryNode& expr) {
     auto left_exp = this->evaluate(*expr.left);
     if (!left_exp.has_value()) {
         return left_exp;
@@ -267,12 +275,12 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
 }
 
 
-std::expected<Object, InterpreterError> Interpreter::visit_variable_expr(const VariableNode& expr) {
+std::expected<Object, InterpreterSignal> Interpreter::visit_variable_expr(const VariableNode& expr) {
     return this->environment->get(*expr.name);
 }
 
 
-std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const AssignmentNode& expr) {
+std::expected<Object, InterpreterSignal> Interpreter::visit_assignment_expr(const AssignmentNode& expr) {
     auto value = this->evaluate(*expr.expr);
     if (!value.has_value()) {
         return value;
@@ -284,7 +292,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const
 }
 
 
-std::expected<Object, InterpreterError> Interpreter::visit_logical_expr(const LogicalNode& expr) {
+std::expected<Object, InterpreterSignal> Interpreter::visit_logical_expr(const LogicalNode& expr) {
     auto left = this->evaluate(*expr.left);
 
     if (expr.oper->type == TokenType::OR) {
@@ -296,7 +304,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_logical_expr(const Lo
 }
 
 
-std::expected<Object, InterpreterError> Interpreter::visit_call_expr(const CallNode& expr) {
+std::expected<Object, InterpreterSignal> Interpreter::visit_call_expr(const CallNode& expr) {
     auto callee = this->evaluate(*expr.callee);
     if (!callee.has_value()) {
         return callee;
@@ -313,7 +321,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_call_expr(const CallN
         }
     }
 
-    auto function = std::get_if<LoxCallable*>(&callee.value());
+    auto function = std::get_if<std::shared_ptr<LoxCallable>>(&callee.value());
     if (!function) {
         return std::unexpected(InterpreterError(InterpreterErrorType::NotCallable, *expr.paren, "Can only call functions and classes"));
     }
@@ -322,11 +330,18 @@ std::expected<Object, InterpreterError> Interpreter::visit_call_expr(const CallN
             std::format("Expected {} arguments but got {}.", (*function)->arity(), arguments.size())
         ));
     }
-    return (*function)->call(this, arguments);
+    auto res = (*function)->call(*this, arguments);
+    if (res.has_value()) {
+        if (std::holds_alternative<ReturnSignal>(res.value())) {
+            return std::get<ReturnSignal>(res.value()).value;
+        }
+        return std::unexpected(res.value());
+    }
+    return None();
 }
 
 
-std::expected<Object, InterpreterError> Interpreter::evaluate(const ExpressionNode& expr) {
+std::expected<Object, InterpreterSignal> Interpreter::evaluate(const ExpressionNode& expr) {
     using enum ExpressionType;
     switch (expr.get_type()) {
         case LITERAL: return expr.get_literal_node()->value;
@@ -366,7 +381,12 @@ void Interpreter::interpret(const std::span<StatementNode*>& stmts) {
     for (const auto& stmt : stmts) {
         if (repl_mode && stmt->get_type() == StatementType::EXPRESSION) {
             if (auto res = this->print_expression(*stmt->get_expression_statement_node()->expr); res.has_value()) {
-                Lox::runtime_error(res.value());
+                std::visit([](const auto& v) {
+                    using L = std::decay_t<decltype(v)>;
+                    if constexpr (std::is_same_v<L, InterpreterError>) {
+                        Lox::runtime_error(v);
+                    }
+                }, res.value());
             }
             continue;
         }

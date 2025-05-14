@@ -27,7 +27,7 @@ class Environment {
 public:
     Environment() = default;
     explicit Environment(Environment* enclosing): enclosing{enclosing} {}
-    void define(std::string_view, const Object&);
+    void define(std::string_view, Object);
     std::expected<Object, InterpreterError> get(const Token&) const;
-    std::optional<InterpreterError> assign(const Token&, const Object&);
+    std::optional<InterpreterError> assign(const Token&, Object);
 };

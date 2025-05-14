@@ -30,14 +30,22 @@ StatementNode* Parser::parse_declaration() {
 
 
 std::expected<StatementNode*, ParserError> Parser::parse_declaration2() {
-    if (this->match_token({{FUN}})) return this->parse_function_declaration("function");
-    if (this->match_token({{TokenType::VAR}})) return this->parse_variable_declaration();
+    if (this->match_token({{FUN}})) {
+        auto res = this->parse_function_declaration("function");
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
+    if (this->match_token({{TokenType::VAR}})) {
+        auto res = this->parse_variable_declaration();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
 
     return this->parse_statement();
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_variable_declaration() {
+std::expected<VariableDeclarationNode*, ParserError> Parser::parse_variable_declaration() {
     auto name = this->consume(IDENTIFIER, "Expect variable name.");
     if (!name.has_value()) {
         return std::unexpected(name.error());
@@ -53,11 +61,11 @@ std::expected<StatementNode*, ParserError> Parser::parse_variable_declaration() 
 
     this->consume(SEMICOLON, "Expect ';' after variable declaration.");
 
-    return this->allocator.create<StatementNode>(this->allocator.create<VariableDeclarationNode>(name.value(), initializer));
+    return this->allocator.create<VariableDeclarationNode>(name.value(), initializer);
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_function_declaration(std::string_view kind) {
+std::expected<FunctionDeclarationNode*, ParserError> Parser::parse_function_declaration(std::string_view kind) {
     auto name = this->consume(IDENTIFIER, std::format("Expect {} name.", kind));
     if (!name.has_value()) {
         return std::unexpected(name.error());
@@ -90,26 +98,56 @@ std::expected<StatementNode*, ParserError> Parser::parse_function_declaration(st
 
     auto body = this->parse_block();
     if (!body.has_value()) {
-        return body;
+        return std::unexpected(body.error());
     }
-    return this->allocator.create<StatementNode>(this->allocator.create<FunctionDeclarationNode>(name.value(), params, body.value()));
+    return this->allocator.create<FunctionDeclarationNode>(name.value(), params, body.value());
 }
 
 
 std::expected<StatementNode*, ParserError> Parser::parse_statement() {
-    if (this->match_token({{FOR}})) return this->parse_for_statement();
-    if (this->match_token({{IF}})) return this->parse_if_statement();
-    if (this->match_token({{PRINT}})) return this->parse_print_statement();
-    if (this->match_token({{LEFT_BRACE}})) return this->parse_block();
-    if (this->match_token({{BREAK}})) return this->parse_break_statement();
-    if (this->match_token({{RETURN}})) return this->parse_return_statement();
-    if (this->match_token({{WHILE}})) return this->parse_while_statement();
+    if (this->match_token({{FOR}})) {
+        auto res = this->parse_for_statement();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
+    if (this->match_token({{IF}})) {
+        auto res = this->parse_if_statement();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
+    if (this->match_token({{PRINT}})) {
+        auto res = this->parse_print_statement();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
+    if (this->match_token({{LEFT_BRACE}})) {
+        auto res = this->parse_block();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
+    if (this->match_token({{BREAK}})) {
+        auto res = this->parse_break_statement();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
+    if (this->match_token({{RETURN}})) {
+        auto res = this->parse_return_statement();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
+    if (this->match_token({{WHILE}})) {
+        auto res = this->parse_while_statement();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
 
-    return parse_expression_statement();
+    auto res = parse_expression_statement();
+    if (!res.has_value()) { return std::unexpected(res.error()); }
+    return this->allocator.create<StatementNode>(res.value());
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_block() {
+std::expected<BlockStatementNode*, ParserError> Parser::parse_block() {
     auto statements = this->allocator.create<std::vector<StatementNode*>>();
     while (!this->check_next_token(RIGHT_BRACE) && !this->is_at_end()) {
         if (auto res = this->parse_declaration()) {
@@ -122,11 +160,11 @@ std::expected<StatementNode*, ParserError> Parser::parse_block() {
         return std::unexpected(res.error());
     }
 
-    return this->allocator.create<StatementNode>(this->allocator.create<BlockStatementNode>(statements));
+    return this->allocator.create<BlockStatementNode>(statements);
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_print_statement() {
+std::expected<PrintStatementNode*, ParserError> Parser::parse_print_statement() {
     auto expr = this->parse_expression();
     if (!expr.has_value()) {
         return std::unexpected(std::move(expr.error()));
@@ -134,11 +172,11 @@ std::expected<StatementNode*, ParserError> Parser::parse_print_statement() {
     if (auto res = this->consume(TokenType::SEMICOLON, "Expect ';' after value."); !res.has_value()) {
         return std::unexpected(std::move(res.error()));
     }
-    return this->allocator.create<StatementNode>(this->allocator.create<PrintStatementNode>(expr.value()));
+    return this->allocator.create<PrintStatementNode>(expr.value());
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_expression_statement() {
+std::expected<ExpressionStatementNode*, ParserError> Parser::parse_expression_statement() {
     auto expr = this->parse_expression();
     if (!expr.has_value()) {
         return std::unexpected(std::move(expr.error()));
@@ -147,11 +185,11 @@ std::expected<StatementNode*, ParserError> Parser::parse_expression_statement() 
         auto res = this->consume(TokenType::SEMICOLON, "Expect ';' after value.");
         if (!res.has_value()) return std::unexpected(res.error());
     }
-    return this->allocator.create<StatementNode>(this->allocator.create<ExpressionStatementNode>(expr.value()));
+    return this->allocator.create<ExpressionStatementNode>(expr.value());
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_if_statement() {
+std::expected<IfStatementNode*, ParserError> Parser::parse_if_statement() {
     if (auto res = this->consume(LEFT_PAREN, "Expect '(' after 'if'."); !res.has_value()) {
         return std::unexpected(res.error());
     }
@@ -162,22 +200,22 @@ std::expected<StatementNode*, ParserError> Parser::parse_if_statement() {
 
     auto then_branch = this->parse_statement();
     if (!then_branch.has_value()) {
-        return then_branch;
+        return std::unexpected(then_branch.error());
     }
 
     StatementNode* else_branch = nullptr;
     if (this->match_token({{TokenType::ELSE}})) {
         auto else_branch_res = this->parse_statement();
         if (!else_branch_res.has_value()) {
-            return else_branch_res;
+            return std::unexpected(else_branch_res.error());
         }
         else_branch = else_branch_res.value();
     }
 
-    return this->allocator.create<StatementNode>(this->allocator.create<IfStatementNode>(condition.value(), then_branch.value(), else_branch));
+    return this->allocator.create<IfStatementNode>(condition.value(), then_branch.value(), else_branch);
 }
 
-std::expected<StatementNode*, ParserError> Parser::parse_while_statement() {
+std::expected<WhileStatementNode*, ParserError> Parser::parse_while_statement() {
     if (auto res = this->consume(LEFT_PAREN, "Expect '(' after 'while'."); !res.has_value()) {
         return std::unexpected(res.error());
     }
@@ -192,14 +230,14 @@ std::expected<StatementNode*, ParserError> Parser::parse_while_statement() {
     auto body = this->parse_statement();
     this->loop_depth--;
     if (!body.has_value()) {
-        return body;
+        return std::unexpected(body.error());
     }
 
-    return this->allocator.create<StatementNode>(this->allocator.create<WhileStatementNode>(condition.value(), body.value()));
+    return this->allocator.create<WhileStatementNode>(condition.value(), body.value());
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_for_statement() {
+std::expected<BlockStatementNode*, ParserError> Parser::parse_for_statement() {
     if (auto res = this->consume(LEFT_PAREN, "Expect '(' after 'for'."); !res.has_value()) {
         return std::unexpected(res.error());
     }
@@ -209,15 +247,15 @@ std::expected<StatementNode*, ParserError> Parser::parse_for_statement() {
     } else if (this->match_token({{VAR}})) {
         auto ini_res = this->parse_variable_declaration();
         if (!ini_res.has_value()) {
-            return ini_res;
+            return std::unexpected(ini_res.error());
         }
-        initializer = ini_res.value();
+        initializer = this->allocator.create<StatementNode>(ini_res.value());
     } else {
         auto ini_res = this->parse_expression_statement();
         if (!ini_res.has_value()) {
-            return ini_res;
+            return std::unexpected(ini_res.error());
         }
-        initializer = ini_res.value();
+        initializer = this->allocator.create<StatementNode>(ini_res.value());
     }
 
     ExpressionNode* condition = nullptr;
@@ -250,7 +288,7 @@ std::expected<StatementNode*, ParserError> Parser::parse_for_statement() {
     auto body_exp = this->parse_statement();
     this->loop_depth--;
     if (!body_exp.has_value()) {
-        return body_exp;
+        return std::unexpected(body_exp.error());
     }
     StatementNode* body = body_exp.value();
     if (increment) {
@@ -264,17 +302,16 @@ std::expected<StatementNode*, ParserError> Parser::parse_for_statement() {
     }
     auto while_stmt = this->allocator.create<StatementNode>(this->allocator.create<WhileStatementNode>(condition, body));
 
-
+    std::vector<StatementNode*> st_list {};
     if (initializer) {
-        auto st_list = this->allocator.create<std::vector<StatementNode*>>(std::vector<StatementNode*>({{initializer, body}}));
-        while_stmt = this->allocator.create<StatementNode>(this->allocator.create<BlockStatementNode>(st_list));
+        st_list.push_back(initializer);
     }
-
-    return while_stmt;
+    st_list.push_back(while_stmt);
+    return this->allocator.create<BlockStatementNode>(this->allocator.create<std::vector<StatementNode*>>(std::move(st_list)));
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_break_statement() {
+std::expected<BreakStatementNode*, ParserError> Parser::parse_break_statement() {
     if (this->loop_depth == 0) {
         this->error(this->previous(), "");
         return std::unexpected(ParserError{});
@@ -282,11 +319,11 @@ std::expected<StatementNode*, ParserError> Parser::parse_break_statement() {
     if (auto res = this->consume(SEMICOLON, "Expect ';' after 'break'."); !res.has_value()) {
         return std::unexpected(res.error());
     }
-    return this->allocator.create<StatementNode>(this->allocator.create<BreakStatementNode>());
+    return this->allocator.create<BreakStatementNode>();
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_return_statement() {
+std::expected<ReturnStatementNode*, ParserError> Parser::parse_return_statement() {
     Token& rt = this->previous();
     ExpressionNode* rt_exp = nullptr;
     if (!this->check_next_token(SEMICOLON)) {
@@ -294,11 +331,11 @@ std::expected<StatementNode*, ParserError> Parser::parse_return_statement() {
         if (!rt_res.has_value()) {
             return std::unexpected(rt_res.error());
         }
-        rt_exp = rt_res.value()->get_expression_statement_node()->expr;
+        rt_exp = rt_res.value()->expr;
     } else {
         this->advance();
     }
-    return this->allocator.create<StatementNode>(this->allocator.create<ReturnStatementNode>(&rt, rt_exp));
+    return this->allocator.create<ReturnStatementNode>(&rt, rt_exp);
 }
 
 

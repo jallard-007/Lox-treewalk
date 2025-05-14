@@ -2,8 +2,8 @@
 #include <iostream>
 
 
-void Environment::define(std::string_view n, const Object& v) {
-    this->values[std::string(n)] = v;
+void Environment::define(std::string_view n, Object v) {
+    this->values[std::string(n)] = std::move(v);
 }
 
 
@@ -19,16 +19,16 @@ std::expected<Object, InterpreterError> Environment::get(const Token& name) cons
 }
 
 
-std::optional<InterpreterError> Environment::assign(const Token& name, const Object& value) {
+std::optional<InterpreterError> Environment::assign(const Token& name, Object value) {
     auto res = this->values.find(name.lexeme);
 
     if (res == this->values.end()) {
         if (this->enclosing) {
-            return this->enclosing->assign(name, value);
+            return this->enclosing->assign(name, std::move(value));
         }
         return InterpreterError(InterpreterErrorType::UndefinedVariable, name, "Undefined variable '" + std::string(name.lexeme) + "'.");
     }
 
-    res->second = value;
+    res->second = std::move(value);
     return std::nullopt;
 }
