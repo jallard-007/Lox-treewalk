@@ -42,12 +42,13 @@ std::optional<InterpreterSignal> Interpreter::visit_statement_node(const Stateme
     switch (stmt.get_type()) {
         case PRINT: return this->visit_print_statement_node(*stmt.get_print_statement_node());
         case EXPRESSION: return this->visit_expression_statement_node(*stmt.get_expression_statement_node());
-        case VARIABLE: return this->visit_variable_statement_node(*stmt.get_variable_statement_node());
+        case VARIABLE: return this->visit_variable_declaration_node(*stmt.get_variable_statement_node());
         case BLOCK: return this->visit_block_statement_node(*stmt.get_block_statement_node());
         case IF: return this->visit_if_statement_node(*stmt.get_if_statement_node());
         case WHILE: return this->visit_while_statement_node(*stmt.get_while_statement_node());
         case BREAK: return this->visit_break_statement_node(*stmt.get_break_statement_node());
         case RETURN: return this->visit_return_statement_node(*stmt.get_return_statement_node());
+        case FUNCTION: return this->visit_function_declaration_node(*stmt.get_function_declaration_node());
     }
     return InterpreterError(InterpreterErrorType::Unimplemented, "Statement type not implemented");
 }
@@ -96,7 +97,7 @@ std::optional<InterpreterError> Interpreter::visit_expression_statement_node(con
 }
 
 
-std::optional<InterpreterError> Interpreter::visit_variable_statement_node(const VariableDefStatementNode& stmt) {
+std::optional<InterpreterError> Interpreter::visit_variable_declaration_node(const VariableDeclarationNode& stmt) {
     Object value = None();
     if (stmt.initializer) {
         auto res = evaluate(*stmt.initializer);
@@ -106,7 +107,7 @@ std::optional<InterpreterError> Interpreter::visit_variable_statement_node(const
         value = res.value();
     }
 
-    this->environment->define(stmt.name.lexeme, value);
+    this->environment->define(stmt.name->lexeme, value);
     return std::nullopt;
 }
 
@@ -163,6 +164,10 @@ InterpreterSignal Interpreter::visit_return_statement_node(const ReturnStatement
     return ReturnSignal{res.value()};
 }
 
+std::optional<InterpreterSignal> Interpreter::visit_function_declaration_node(const FunctionDeclarationNode& func) {
+    return std::nullopt;
+}
+
 
 std::expected<Object, InterpreterError> Interpreter::visit_unary_expr(const UnaryNode& expr) {
     auto right_exp = this->evaluate(*expr.operand);
@@ -170,7 +175,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_unary_expr(const Unar
         return right_exp;
     }
     auto right = right_exp.value();
-    switch (expr.oper.type) {
+    switch (expr.oper->type) {
         case TokenType::MINUS:
             return -std::get<double>(right);
         case TokenType::BANG:
@@ -178,7 +183,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_unary_expr(const Unar
         default:
             break;
     }
-    return std::unexpected(InterpreterError(InterpreterErrorType::Unimplemented, expr.oper, "Unary operator not implemented"));
+    return std::unexpected(InterpreterError(InterpreterErrorType::Unimplemented, *expr.oper, "Unary operator not implemented"));
 }
 
 
@@ -194,9 +199,9 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
     auto& left = left_exp.value();
     auto& right = right_exp.value();
 
-    switch (expr.oper.type) {
+    switch (expr.oper->type) {
         case TokenType::MINUS: {
-            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
+            if (auto err = check_number_operands(*expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) - std::get<double>(right);
@@ -211,41 +216,41 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
                 return std::get<String>(left) + std::get<String>(right);
             }
 
-            return std::unexpected(InterpreterError(InterpreterErrorType::BinOpValuesNotCompatible, expr.oper, "Binary operator values not compatible"));
+            return std::unexpected(InterpreterError(InterpreterErrorType::BinOpValuesNotCompatible, *expr.oper, "Binary operator values not compatible"));
         }
 
         case TokenType::SLASH: {
-            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
+            if (auto err = check_number_operands(*expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) / std::get<double>(right);
         }
         case TokenType::STAR: {
-            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
+            if (auto err = check_number_operands(*expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) * std::get<double>(right);
         }
         case TokenType::GREATER: {
-            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
+            if (auto err = check_number_operands(*expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) > std::get<double>(right);
         }
         case TokenType::GREATER_EQUAL: {
-            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
+            if (auto err = check_number_operands(*expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) >= std::get<double>(right);
         }
         case TokenType::LESS: {
-            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
+            if (auto err = check_number_operands(*expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) < std::get<double>(right);
         }
         case TokenType::LESS_EQUAL: {
-            if (auto err = check_number_operands(expr.oper, left, right); err.has_value()) {
+            if (auto err = check_number_operands(*expr.oper, left, right); err.has_value()) {
                 return std::unexpected(err.value());
             }
             return std::get<double>(left) <= std::get<double>(right);
@@ -258,12 +263,12 @@ std::expected<Object, InterpreterError> Interpreter::visit_binary_expr(const Bin
             break;
     }
 
-    return std::unexpected(InterpreterError(InterpreterErrorType::Unimplemented, expr.oper, "Binary operator not implemented"));
+    return std::unexpected(InterpreterError(InterpreterErrorType::Unimplemented, *expr.oper, "Binary operator not implemented"));
 }
 
 
 std::expected<Object, InterpreterError> Interpreter::visit_variable_expr(const VariableNode& expr) {
-    return this->environment->get(expr.name);
+    return this->environment->get(*expr.name);
 }
 
 
@@ -272,7 +277,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const
     if (!value.has_value()) {
         return value;
     }
-    if (auto err = this->environment->assign(expr.name, value.value()); err.has_value()) {
+    if (auto err = this->environment->assign(*expr.name, value.value()); err.has_value()) {
         return std::unexpected(err.value());
     }
     return value;
@@ -282,7 +287,7 @@ std::expected<Object, InterpreterError> Interpreter::visit_assignment_expr(const
 std::expected<Object, InterpreterError> Interpreter::visit_logical_expr(const LogicalNode& expr) {
     auto left = this->evaluate(*expr.left);
 
-    if (expr.oper.type == TokenType::OR) {
+    if (expr.oper->type == TokenType::OR) {
       if (this->is_truthy(left.value())) return left;
     } else {
       if (!this->is_truthy(left.value())) return left;
@@ -310,10 +315,10 @@ std::expected<Object, InterpreterError> Interpreter::visit_call_expr(const CallN
 
     auto function = std::get_if<LoxCallable*>(&callee.value());
     if (!function) {
-        return std::unexpected(InterpreterError(InterpreterErrorType::NotCallable, expr.paren, "Can only call functions and classes"));
+        return std::unexpected(InterpreterError(InterpreterErrorType::NotCallable, *expr.paren, "Can only call functions and classes"));
     }
     if (arguments.size() != (*function)->arity()) {
-        return std::unexpected(InterpreterError(InterpreterErrorType::Arity, expr.paren,
+        return std::unexpected(InterpreterError(InterpreterErrorType::Arity, *expr.paren,
             std::format("Expected {} arguments but got {}.", (*function)->arity(), arguments.size())
         ));
     }

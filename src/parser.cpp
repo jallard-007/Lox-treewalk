@@ -6,37 +6,34 @@
 using enum TokenType;
 
 
-Parser::Parser(ASTAllocator allocator, std::vector<Token> tokens): tokens{std::move(tokens)}, allocator{std::move(allocator)} {}
+Parser::Parser(Program& program): tokens{program.tokens}, allocator{program.allocator}, statements{program.statements} {}
 
 
-std::expected<std::vector<StatementNode*>, ParserError> Parser::parse() {
-    std::vector<StatementNode*> statements;
+void Parser::parse() {
     while (!this->is_at_end()) {
-        auto res = this->parse_declaration();
-        if (!res.has_value()) {
-            return std::unexpected(res.error());
+        if (auto res = this->parse_declaration()) {
+            this->statements.push_back(res);
         }
-        statements.push_back(res.value());
     }
-    return statements;
 }
 
 
-std::expected<StatementNode*, ParserError> Parser::parse_declaration() {
+StatementNode* Parser::parse_declaration() {
     std::expected<StatementNode*, ParserError> res = this->parse_declaration2();
     if (!res.has_value()) {
         this->synchronize();
+        Lox::had_error = true;
+        return nullptr;
     }
-    return res;
+    return res.value();
 }
 
 
 std::expected<StatementNode*, ParserError> Parser::parse_declaration2() {
-    if (this->match_token({{TokenType::VAR}})) {
-        return this->parse_variable_declaration();
-    } else {
-        return this->parse_statement();
-    }
+    if (this->match_token({{FUN}})) return this->parse_function_declaration("function");
+    if (this->match_token({{TokenType::VAR}})) return this->parse_variable_declaration();
+
+    return this->parse_statement();
 }
 
 
@@ -56,7 +53,46 @@ std::expected<StatementNode*, ParserError> Parser::parse_variable_declaration() 
 
     this->consume(SEMICOLON, "Expect ';' after variable declaration.");
 
-    return this->allocator.create<StatementNode>(this->allocator.create<VariableDefStatementNode>(*name.value(), initializer));
+    return this->allocator.create<StatementNode>(this->allocator.create<VariableDeclarationNode>(name.value(), initializer));
+}
+
+
+std::expected<StatementNode*, ParserError> Parser::parse_function_declaration(std::string_view kind) {
+    auto name = this->consume(IDENTIFIER, std::format("Expect {} name.", kind));
+    if (!name.has_value()) {
+        return std::unexpected(name.error());
+    }
+    if (auto res = this->consume(LEFT_PAREN, std::format("Expect '(' after {} name.", kind)); !res.has_value()) {
+        return std::unexpected(name.error());
+    }
+
+    std::vector<Token*>* params = this->allocator.create<std::vector<Token*>>();
+    if (!this->check_next_token(RIGHT_PAREN)) {
+        do {
+            if (params->size() >= 255) {
+                error(peek(), "Can't have more than 255 parameters.");
+            }
+
+            auto param = consume(IDENTIFIER, "Expect parameter name.");
+            if (!param.has_value()) {
+                return std::unexpected(param.error());
+            }
+            params->push_back(param.value());
+        } while (this->match_token({{COMMA}}));
+    }
+    if (auto res = consume(RIGHT_PAREN, "Expect ')' after parameters."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+
+    if (auto res = consume(LEFT_BRACE, std::format("Expect '{{' before {} body.", kind)); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+
+    auto body = this->parse_block();
+    if (!body.has_value()) {
+        return body;
+    }
+    return this->allocator.create<StatementNode>(this->allocator.create<FunctionDeclarationNode>(name.value(), params, body.value()));
 }
 
 
@@ -75,14 +111,14 @@ std::expected<StatementNode*, ParserError> Parser::parse_statement() {
 
 std::expected<StatementNode*, ParserError> Parser::parse_block() {
     auto statements = this->allocator.create<std::vector<StatementNode*>>();
-    while (!this->check_next_token(TokenType::RIGHT_BRACE) && !this->is_at_end()) {
-        auto res = this->parse_declaration();
-        if (!res.has_value()) {
-            return std::unexpected(std::move(res.error()));
+    while (!this->check_next_token(RIGHT_BRACE) && !this->is_at_end()) {
+        if (auto res = this->parse_declaration()) {
+            statements->push_back(res);
+        } else {
+            return std::unexpected(ParserError());
         }
-        statements->push_back(res.value());
     }
-    if (auto res = this->consume(TokenType::RIGHT_BRACE, "Expect '}' after block."); !res.has_value()) {
+    if (auto res = this->consume(RIGHT_BRACE, "Expect '}' after block."); !res.has_value()) {
         return std::unexpected(res.error());
     }
 
@@ -251,7 +287,7 @@ std::expected<StatementNode*, ParserError> Parser::parse_break_statement() {
 
 
 std::expected<StatementNode*, ParserError> Parser::parse_return_statement() {
-    const Token& rt = this->previous();
+    Token& rt = this->previous();
     ExpressionNode* rt_exp = nullptr;
     if (!this->check_next_token(SEMICOLON)) {
         auto rt_res = this->parse_expression_statement();
@@ -262,7 +298,7 @@ std::expected<StatementNode*, ParserError> Parser::parse_return_statement() {
     } else {
         this->advance();
     }
-    return this->allocator.create<StatementNode>(this->allocator.create<ReturnStatementNode>(rt, rt_exp));
+    return this->allocator.create<StatementNode>(this->allocator.create<ReturnStatementNode>(&rt, rt_exp));
 }
 
 
@@ -283,7 +319,7 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_assignment() {
             return value;
 
         if (expr.value()->get_type() == ExpressionType::VARIABLE) {
-            Token& name = expr.value()->get_variable_node()->name;
+            Token* name = expr.value()->get_variable_node()->name;
             return this->allocator.create<ExpressionNode>(this->allocator.create<AssignmentNode>(name, value.value()));
         }
 
@@ -306,7 +342,7 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_logical_or() {
         if (!right.has_value()) {
             return right;
         }
-        expr = this->allocator.create<ExpressionNode>(this->allocator.create<LogicalNode>(oper, expr, right.value()));
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<LogicalNode>(&oper, expr, right.value()));
     }
 
     return expr;
@@ -325,7 +361,7 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_logical_and() {
         if (!right.has_value()) {
             return right;
         }
-        expr = this->allocator.create<ExpressionNode>(this->allocator.create<LogicalNode>(oper, expr, right.value()));
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<LogicalNode>(&oper, expr, right.value()));
     }
 
     return expr;
@@ -338,12 +374,12 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_equality() {
         return expr;
 
     while (this->match_token({{TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL}})) {
-        const Token& oper = this->previous();
+        Token& oper = this->previous();
         auto right = this->parse_comparison();
         if (!right.has_value())
             return right;
 
-        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(oper, *expr, *right));
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(&oper, *expr, *right));
     }
 
     return expr;
@@ -356,12 +392,12 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_comparison() {
         return expr;
 
     while (this->match_token({{GREATER, GREATER_EQUAL, LESS, LESS_EQUAL}})) {
-        const Token& oper = this->previous();
+        Token& oper = this->previous();
         auto right = this->parse_term();
         if (!right.has_value())
             return right;
 
-        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(oper, *expr, *right));
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(&oper, *expr, *right));
     }
 
     return expr;
@@ -374,12 +410,12 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_term() {
         return expr;
 
     while (this->match_token({{TokenType::MINUS, TokenType::PLUS}})) {
-        const Token& oper = previous();
+        Token& oper = previous();
         auto right = this->parse_factor();
         if (!right.has_value())
             return right;   
  
-        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(oper, *expr, *right));
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(&oper, *expr, *right));
     }
 
     return expr;
@@ -393,12 +429,12 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_factor() {
 
     ExpressionNode* expr = expr_exp.value();
     while (this->match_token({{TokenType::MINUS, TokenType::PLUS}})) {
-        const Token& oper = previous();
+        Token& oper = previous();
         auto right = this->parse_unary();
         if (!right.has_value())
             return right;
 
-        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(oper, expr, *right));
+        expr = this->allocator.create<ExpressionNode>(this->allocator.create<BinaryNode>(&oper, expr, *right));
     }
 
     return expr;
@@ -407,12 +443,12 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_factor() {
 
 std::expected<ExpressionNode*, ParserError> Parser::parse_unary() {
     if (this->match_token({{TokenType::BANG, TokenType::MINUS}})) {
-        const Token& oper = this->previous();
+        Token& oper = this->previous();
         auto right = this->parse_primary();
         if (!right.has_value())
             return right;
 
-        return this->allocator.create<ExpressionNode>(this->allocator.create<UnaryNode>(oper, *right));
+        return this->allocator.create<ExpressionNode>(this->allocator.create<UnaryNode>(&oper, *right));
     }
   
     return this->parse_call();
@@ -461,7 +497,7 @@ std::expected<ExpressionNode*, ParserError> Parser::finish_call(ExpressionNode& 
         return std::unexpected(paren_exp.error());
     }
 
-    return this->allocator.create<ExpressionNode>(this->allocator.create<CallNode>(&callee, *paren_exp.value(), arguments));
+    return this->allocator.create<ExpressionNode>(this->allocator.create<CallNode>(&callee, paren_exp.value(), arguments));
 }
 
 
@@ -478,7 +514,7 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_primary() {
     }
 
     if (this->match_token({{IDENTIFIER}})) {
-        return this->allocator.create<ExpressionNode>(this->allocator.create<VariableNode>(this->previous()));
+        return this->allocator.create<ExpressionNode>(this->allocator.create<VariableNode>(&this->previous()));
     }
 
     if (this->match_token({{LEFT_PAREN}})) {
@@ -516,25 +552,25 @@ bool Parser::is_at_end() const {
 }
 
 
-std::expected<const Token*, ParserError> Parser::consume(TokenType t, std::string_view v) {
+std::expected<Token*, ParserError> Parser::consume(TokenType t, std::string_view v) {
     if (this->check_next_token(t)) return &this->advance();
     this->error(this->peek(), v);
     return std::unexpected(ParserError());
 }
 
 
-const Token& Parser::advance() {
+Token& Parser::advance() {
     if (!this->is_at_end()) this->current++;
     return this->previous();
 }
 
 
-const Token& Parser::peek() const {
+Token& Parser::peek() const {
     return this->tokens[this->current];
 }
 
 
-const Token& Parser::previous() const {
+Token& Parser::previous() const {
     return this->tokens[this->current - 1];
 }
 

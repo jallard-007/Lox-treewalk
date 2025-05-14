@@ -24,7 +24,7 @@ bool is_alpha_numeric(char c) {
 }
 
 
-Scanner::Scanner(std::string program): program_{std::move(program)}, program{this->program_} {}
+Scanner::Scanner(const std::string& program, std::vector<Token>& tokens): program_{program}, program{this->program_}, tokens{tokens} {}
 
 
 std::vector<Token> Scanner::scan() {

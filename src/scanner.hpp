@@ -13,16 +13,16 @@ struct Scanner {
 
     static const std::unordered_map<std::string_view, TokenType> keywords;
 
-    const std::string program_;
+    const std::string& program_;
     const std::string_view program;
-    
-    std::vector<Token> tokens;
+
+    std::vector<Token>& tokens;
 
     uint32_t start = 0;
     uint32_t current = 0;
     uint32_t line = 1;
 
-    explicit Scanner(std::string program);
+    explicit Scanner(const std::string&, std::vector<Token>&);
 
     std::vector<Token> scan();
 

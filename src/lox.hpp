@@ -14,7 +14,7 @@ struct Lox {
     static void error(const Token& token, std::string_view message);
     static void runtime_error(const InterpreterError& error);
 
-    void run(const std::string& program) const;
+    void run(std::string program) const;
 
     int run_file(const std::string& file) const;
 

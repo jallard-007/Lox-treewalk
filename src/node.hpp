@@ -6,7 +6,7 @@
 #include <vector>
 #include "token.hpp"
 #include "tagged_ptr.hpp"
-
+#include "allocator.hpp"
 
 constexpr uint64_t EXPRESSION_NODE_ALIGNMENT_REQ = 8;
 
@@ -18,31 +18,31 @@ struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) LiteralNode {
 
 
 struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) UnaryNode {
-    Token oper;
+    Token* oper;
     ExpressionNode* operand {};
 };
 
 
 struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) BinaryNode {
-    Token oper;
+    Token* oper;
     ExpressionNode* left {};
     ExpressionNode* right {};
 };
 
 
 struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) VariableNode {
-    Token name;
+    Token* name;
 };
 
 
 struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) AssignmentNode {
-    Token name;
+    Token* name;
     ExpressionNode* expr {};
 };
 
 
 struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) LogicalNode {
-    Token oper;
+    Token* oper;
     ExpressionNode* left {};
     ExpressionNode* right {};
 };
@@ -50,7 +50,7 @@ struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) LogicalNode {
 
 struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) CallNode {
     ExpressionNode* callee {};
-    Token paren;
+    Token* paren;
     std::vector<ExpressionNode*>* args {};
 };
 
@@ -124,7 +124,7 @@ template<> constexpr ExpressionType ExpressionNode::get_type_for<LogicalNode>() 
 template<> constexpr ExpressionType ExpressionNode::get_type_for<CallNode>() { return ExpressionType::CALL; }
 
 
-constexpr uint64_t STATEMENT_NODE_ALIGNMENT_REQ = 8;
+constexpr uint64_t STATEMENT_NODE_ALIGNMENT_REQ = 16;
 
 class StatementNode;
 
@@ -138,8 +138,8 @@ struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) ExpressionStatementNode {
 };
 
 
-struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) VariableDefStatementNode {
-    Token name;
+struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) VariableDeclarationNode {
+    Token* name;
     ExpressionNode* initializer {};
 };
 
@@ -168,11 +168,19 @@ struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) BreakStatementNode {
 
 
 struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) ReturnStatementNode {
-    Token rt;
+    Token* rt;
     ExpressionNode* expr;
 };
 
-constexpr uint8_t statement_mask = 0b111;
+
+struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) FunctionDeclarationNode {
+    Token* name;
+    std::vector<Token*>* params;
+    StatementNode* body;
+};
+
+
+constexpr uint8_t statement_mask = 0b1111;
 enum class StatementType {
     PRINT,
     EXPRESSION,
@@ -182,8 +190,9 @@ enum class StatementType {
     WHILE,
     BREAK,
     RETURN,
+    FUNCTION,
 
-    _LAST = RETURN
+    _LAST = FUNCTION
 };
 static_assert(std::to_underlying(StatementType::_LAST) <= statement_mask);
 
@@ -195,32 +204,35 @@ class StatementNode {
 public:
     explicit StatementNode(PrintStatementNode* v) { this->set_<PrintStatementNode>(v); }
     explicit StatementNode(ExpressionStatementNode* v) { this->set_<ExpressionStatementNode>(v); }
-    explicit StatementNode(VariableDefStatementNode* v) { this->set_<VariableDefStatementNode>(v); }
+    explicit StatementNode(VariableDeclarationNode* v) { this->set_<VariableDeclarationNode>(v); }
     explicit StatementNode(BlockStatementNode* v) { this->set_<BlockStatementNode>(v); }
     explicit StatementNode(IfStatementNode* v) { this->set_<IfStatementNode>(v); }
     explicit StatementNode(WhileStatementNode* v) { this->set_<WhileStatementNode>(v); }
     explicit StatementNode(BreakStatementNode* v) { this->set_<BreakStatementNode>(v); }
     explicit StatementNode(ReturnStatementNode* v) { this->set_<ReturnStatementNode>(v); }
+    explicit StatementNode(FunctionDeclarationNode* v) { this->set_<FunctionDeclarationNode>(v); }
 
     StatementType get_type() const { return tagged.get_tag(); }
 
     PrintStatementNode* get_print_statement_node() const { return this->get<PrintStatementNode>(); }
     ExpressionStatementNode* get_expression_statement_node() const { return this->get<ExpressionStatementNode>(); }
-    VariableDefStatementNode* get_variable_statement_node() const { return this->get<VariableDefStatementNode>(); }
+    VariableDeclarationNode* get_variable_statement_node() const { return this->get<VariableDeclarationNode>(); }
     BlockStatementNode* get_block_statement_node() const { return this->get<BlockStatementNode>(); }
     IfStatementNode* get_if_statement_node() const { return this->get<IfStatementNode>(); }
     WhileStatementNode* get_while_statement_node() const { return this->get<WhileStatementNode>(); }
     BreakStatementNode* get_break_statement_node() const { return this->get<BreakStatementNode>(); }
     ReturnStatementNode* get_return_statement_node() const { return this->get<ReturnStatementNode>(); }
+    FunctionDeclarationNode* get_function_declaration_node() const { return this->get<FunctionDeclarationNode>(); }
 
     void set(PrintStatementNode* v) { return this->set_<PrintStatementNode>(v); }
     void set(ExpressionStatementNode* v) { return this->set_<ExpressionStatementNode>(v); }
-    void set(VariableDefStatementNode* v) { return this->set_<VariableDefStatementNode>(v); }
+    void set(VariableDeclarationNode* v) { return this->set_<VariableDeclarationNode>(v); }
     void set(BlockStatementNode* v) { return this->set_<BlockStatementNode>(v); }
     void set(IfStatementNode* v) { return this->set_<IfStatementNode>(v); }
     void set(WhileStatementNode* v) { return this->set_<WhileStatementNode>(v); }
     void set(BreakStatementNode* v) { return this->set_<BreakStatementNode>(v); }
     void set(ReturnStatementNode* v) { return this->set_<ReturnStatementNode>(v); }
+    void set(FunctionDeclarationNode* v) { return this->set_<FunctionDeclarationNode>(v); }
 
 private:
     template<typename T>
@@ -238,9 +250,21 @@ private:
 
 template<> constexpr StatementType StatementNode::get_type_for<PrintStatementNode>() { return StatementType::PRINT; }
 template<> constexpr StatementType StatementNode::get_type_for<ExpressionStatementNode>() { return StatementType::EXPRESSION; }
-template<> constexpr StatementType StatementNode::get_type_for<VariableDefStatementNode>() { return StatementType::VARIABLE; }
+template<> constexpr StatementType StatementNode::get_type_for<VariableDeclarationNode>() { return StatementType::VARIABLE; }
 template<> constexpr StatementType StatementNode::get_type_for<BlockStatementNode>() { return StatementType::BLOCK; }
 template<> constexpr StatementType StatementNode::get_type_for<IfStatementNode>() { return StatementType::IF; }
 template<> constexpr StatementType StatementNode::get_type_for<WhileStatementNode>() { return StatementType::WHILE; }
 template<> constexpr StatementType StatementNode::get_type_for<BreakStatementNode>() { return StatementType::BREAK; }
 template<> constexpr StatementType StatementNode::get_type_for<ReturnStatementNode>() { return StatementType::RETURN; }
+template<> constexpr StatementType StatementNode::get_type_for<FunctionDeclarationNode>() { return StatementType::FUNCTION; }
+
+
+struct Program {
+    std::string source;
+    std::vector<Token> tokens;
+    std::vector<StatementNode*> statements;
+    ASTAllocator allocator;
+
+    Program() = default;
+    Program(Program&&) = default;
+};

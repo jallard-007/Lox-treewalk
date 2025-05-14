@@ -50,15 +50,18 @@ void Lox::runtime_error(const InterpreterError& error) {
 }
 
 
-void Lox::run(const std::string& program) const {
-    Scanner scanner {program};
-    Parser parser {ASTAllocator(), scanner.scan()};
-    auto expr = parser.parse();
+void Lox::run(std::string source) const {
+    Program program;
+    program.source = std::move(source);
+    Scanner scanner {program.source, program.tokens};
+    program.tokens = scanner.scan();
+    Parser parser {program};
+    parser.parse();
 
     // Stop if there was a syntax error.
     if (had_error) return;
 
-    Lox::interpreter.interpret(expr.value());
+    Lox::interpreter.interpret(program.statements);
 }
 
 
@@ -68,7 +71,7 @@ int Lox::run_file(const std::string& file) const {
         std::cout << "Could not open file " << file << '\n';
         return 60;
     }
-    run(file_content.value());
+    run(std::move(file_content.value()));
 
     if (Lox::had_error) return 65;
     if (Lox::had_runtime_error) return 70;

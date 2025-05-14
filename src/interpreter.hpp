@@ -32,12 +32,13 @@ struct Interpreter {
     [[nodiscard]] std::optional<InterpreterSignal> visit_statement_node(const StatementNode&);
     [[nodiscard]] std::optional<InterpreterError> visit_print_statement_node(const PrintStatementNode&);
     [[nodiscard]] std::optional<InterpreterError> visit_expression_statement_node(const ExpressionStatementNode&);
-    [[nodiscard]] std::optional<InterpreterError> visit_variable_statement_node(const VariableDefStatementNode&);
+    [[nodiscard]] std::optional<InterpreterError> visit_variable_declaration_node(const VariableDeclarationNode&);
     [[nodiscard]] std::optional<InterpreterSignal> visit_block_statement_node(const BlockStatementNode&);
     [[nodiscard]] std::optional<InterpreterSignal> visit_if_statement_node(const IfStatementNode&);
     [[nodiscard]] std::optional<InterpreterSignal> visit_while_statement_node(const WhileStatementNode&);
     [[nodiscard]] BreakSignal visit_break_statement_node(const BreakStatementNode&) const;
     [[nodiscard]] InterpreterSignal visit_return_statement_node(const ReturnStatementNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> visit_function_declaration_node(const FunctionDeclarationNode&);
 
     [[nodiscard]] std::expected<Object, InterpreterError> visit_unary_expr(const UnaryNode&);
     [[nodiscard]] std::expected<Object, InterpreterError> visit_binary_expr(const BinaryNode&);

@@ -11,21 +11,23 @@
 struct ParserError {};
 
 struct Parser {
-    const std::vector<Token> tokens;
+    std::vector<Token>& tokens;
+    ASTAllocator& allocator;
+    std::vector<StatementNode*>& statements;
     size_t current = 0;
-    ASTAllocator allocator;
     uint32_t loop_depth = 0;
   
-    Parser(ASTAllocator allocator, std::vector<Token> tokens);
+    Parser(Program&);
 
-    [[nodiscard]] std::expected<std::vector<StatementNode*>, ParserError> parse();
+    void parse();
 
-    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_declaration();
+    [[nodiscard]] StatementNode* parse_declaration();
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_declaration2();
     
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_block();
 
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_variable_declaration();
+    [[nodiscard]] std::expected<StatementNode*, ParserError> parse_function_declaration(std::string_view);
 
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_statement();
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_print_statement();
@@ -55,10 +57,10 @@ struct Parser {
     bool is_at_end() const;
 
 
-    std::expected<const Token*, ParserError> consume(TokenType, std::string_view);
-    const Token& advance();
-    const Token& peek() const;
-    const Token& previous() const;
+    std::expected<Token*, ParserError> consume(TokenType, std::string_view);
+    Token& advance();
+    Token& peek() const;
+    Token& previous() const;
 
     void synchronize();
     ParserError error(const Token&, std::string_view) const;
