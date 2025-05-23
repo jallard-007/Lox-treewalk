@@ -16,8 +16,8 @@ struct ReturnSignal {
 using InterpreterSignal = std::variant<InterpreterError, BreakSignal, ReturnSignal>;
 
 struct Interpreter {
-    Environment global_env {};
-    Environment* environment;
+    std::shared_ptr<Environment> global_env;
+    std::shared_ptr<Environment> environment;
 
     bool repl_mode = false;
 
@@ -25,7 +25,7 @@ struct Interpreter {
     explicit Interpreter(bool);
 
     [[nodiscard]] std::optional<InterpreterSignal> execute(const StatementNode&);
-    [[nodiscard]] std::optional<InterpreterSignal> execute_block(const BlockStatementNode&, Environment&);
+    [[nodiscard]] std::optional<InterpreterSignal> execute_block(const BlockStatementNode&, std::shared_ptr<Environment>);
     [[nodiscard]] std::expected<Object, InterpreterSignal> evaluate(const ExpressionNode&);
 
     [[nodiscard]] std::optional<InterpreterSignal> visit_statement_node(const StatementNode&);

@@ -39,10 +39,12 @@ std::optional<InterpreterError> check_number_operands(const Token& oper, const O
 }
 
 
-Interpreter::Interpreter(): environment{&this->global_env} {
-    this->global_env.define("clock", std::make_shared<ClockCallable>()); 
+Interpreter::Interpreter(): Interpreter(false) {}
+Interpreter::Interpreter(bool repl_mode): repl_mode{repl_mode} {
+    this->global_env = std::make_shared<Environment>();
+    this->global_env->define("clock", std::make_shared<ClockCallable>());
+    this->environment = this->global_env;
 }
-Interpreter::Interpreter(bool repl_mode): environment{&this->global_env}, repl_mode{repl_mode} {}
 
 std::optional<InterpreterSignal> Interpreter::visit_statement_node(const StatementNode& stmt) {
     using enum StatementType;
@@ -62,14 +64,14 @@ std::optional<InterpreterSignal> Interpreter::visit_statement_node(const Stateme
 
 
 std::optional<InterpreterSignal> Interpreter::visit_block_statement_node(const BlockStatementNode& block_stmt) {
-    Environment env {this->environment};
+    auto env = std::make_shared<Environment>(this->environment);
     return this->execute_block(block_stmt, env);
 }
 
 
-std::optional<InterpreterSignal> Interpreter::execute_block(const BlockStatementNode& block_stmt, Environment& env) {
-    Environment* enclosing = this->environment;
-    this->environment = &env;
+std::optional<InterpreterSignal> Interpreter::execute_block(const BlockStatementNode& block_stmt, std::shared_ptr<Environment> env) {
+    std::shared_ptr<Environment> enclosing = this->environment;
+    this->environment = env;
     for (const auto& stmt : *block_stmt.stmts) {
         auto res = this->execute(*stmt);
         if (res.has_value()) {
@@ -172,7 +174,7 @@ InterpreterSignal Interpreter::visit_return_statement_node(const ReturnStatement
 }
 
 std::optional<InterpreterSignal> Interpreter::visit_function_declaration_node(const FunctionDeclarationNode& func) {
-    this->environment->define(func.name->lexeme, std::make_shared<LoxFunction>(func));
+    this->environment->define(func.name->lexeme, std::make_shared<LoxFunction>(func, this->environment));
     return std::nullopt;
 }
 

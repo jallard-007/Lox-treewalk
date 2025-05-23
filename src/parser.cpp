@@ -327,13 +327,14 @@ std::expected<ReturnStatementNode*, ParserError> Parser::parse_return_statement(
     Token& rt = this->previous();
     ExpressionNode* rt_exp = nullptr;
     if (!this->check_next_token(SEMICOLON)) {
-        auto rt_res = this->parse_expression_statement();
+        auto rt_res = this->parse_expression();
         if (!rt_res.has_value()) {
             return std::unexpected(rt_res.error());
         }
-        rt_exp = rt_res.value()->expr;
-    } else {
-        this->advance();
+        rt_exp = rt_res.value();
+    }
+    if (auto res = this->consume(SEMICOLON, "Expect ';' after return."); !res.has_value()) {
+        return std::unexpected(res.error());
     }
     return this->allocator.create<ReturnStatementNode>(&rt, rt_exp);
 }

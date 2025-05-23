@@ -1,0 +1,14 @@
+fun inc(i) {
+  return i + 1;
+}
+
+fun bar() {
+    var i = 0;
+    fun foobar() {
+        var j = 0;
+    }
+    foobar();
+    print j;
+}
+
+bar();

@@ -164,6 +164,7 @@ struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) WhileStatementNode {
 
 
 struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) BreakStatementNode {
+    Token* tk;
 };
 
 

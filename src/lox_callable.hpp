@@ -14,17 +14,18 @@ public:
 
 class LoxFunction: public LoxCallable {
 public:
+    std::shared_ptr<Environment> closure;
     const FunctionDeclarationNode* declaration;
-    LoxFunction(const FunctionDeclarationNode& declaration): declaration{&declaration} {}
+    LoxFunction(const FunctionDeclarationNode& declaration, std::shared_ptr<Environment> closure): declaration{&declaration}, closure{closure} {}
 
     int arity() {
         return this->declaration->params->size();
     }
 
     std::optional<InterpreterSignal> call(Interpreter& interpreter, std::vector<Object>& arguments) {
-        Environment environment {interpreter.global_env};
+        auto environment = std::make_shared<Environment>(this->closure);
         for (int i = 0; i < this->declaration->params->size(); i++) {
-            environment.define(this->declaration->params->at(i)->lexeme, arguments[i]);
+            environment->define(this->declaration->params->at(i)->lexeme, arguments[i]);
         }
 
         return interpreter.execute_block(*this->declaration->body, environment);
