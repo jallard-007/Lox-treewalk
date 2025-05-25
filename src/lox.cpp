@@ -9,7 +9,7 @@
 #include "scanner.hpp"
 #include "parser.hpp"
 #include "interpreter.hpp"
-
+#include "resolver.hpp"
 
 std::optional<std::string> read_file_to_string(const std::string& filename) {
     std::ifstream file(filename, std::ios::in | std::ios::binary);  // binary avoids newline conversion on Windows
@@ -34,6 +34,7 @@ void Lox::error(int line, std::string_view message) {
 }
 
 void Lox::error(const Token& token, std::string_view message) {
+    Lox::had_error = true;
     if (token.type == TokenType::END_OF_FILE) {
         report(token.line, " at end", message);
     } else {
@@ -45,8 +46,8 @@ void Lox::error(const Token& token, std::string_view message) {
 }
 
 void Lox::runtime_error(const InterpreterError& error) {
-    std::cout << error.msg << "\n[line " << error.where.line << "]\n";
     Lox::had_runtime_error = true;
+    std::cout << error.msg << "\n[line " << error.where.line << "]\n";
 }
 
 
@@ -59,6 +60,12 @@ void Lox::run(std::string source) const {
     parser.parse();
 
     // Stop if there was a syntax error.
+    if (had_error) return;
+
+    Resolver resolver {Lox::interpreter};
+    resolver.resolve(program.statements);
+
+    // Stop if there was a resolution error.
     if (had_error) return;
 
     Lox::interpreter.interpret(program.statements);

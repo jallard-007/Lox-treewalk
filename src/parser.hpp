@@ -15,7 +15,6 @@ struct Parser {
     ASTAllocator& allocator;
     std::vector<StatementNode*>& statements;
     size_t current = 0;
-    uint32_t loop_depth = 0;
 
     Parser(Program&);
 

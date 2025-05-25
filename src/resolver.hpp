@@ -8,12 +8,28 @@
 #include "node.hpp"
 #include "string_hash.hpp"
 
+enum class FunctionType {
+    NONE,
+    FUNCTION
+};
+
+
+struct VarInfo {
+    bool defined;
+    bool used;
+    Token* tk;
+    size_t index;
+};
+
 struct Resolver {
     Interpreter& interpreter;
-    std::vector<std::unordered_map<std::string, bool, string_hash, std::equal_to<>>> scopes;
+    std::vector<std::unordered_map<std::string, VarInfo, string_hash, std::equal_to<>>> scopes;
+    FunctionType current_function = FunctionType::NONE;
+    uint32_t loop_depth = 0;
+
     Resolver(Interpreter&);
 
-    void block(BlockStatementNode&);
+    void visit_block(BlockStatementNode&);
     void begin_scope();
     void end_scope();
     void resolve(std::vector<StatementNode*>&);
@@ -21,13 +37,14 @@ struct Resolver {
     void resolve(ExpressionNode&);
 
     void visit_var_dec_node(VariableDeclarationNode&);
-    void visit_assign_expr(AssignmentNode&);
-    void visit_function_dec(FunctionDeclarationNode&);
+    void visit_assign_expr(ExpressionNode&);
+    void visit_function_dec(StatementNode&);
 
     void visit_expr_stmt(ExpressionStatementNode&);
     void visit_if_stmt(IfStatementNode&);
     void visit_print_stmt(PrintStatementNode&);
     void visit_return_stmt(ReturnStatementNode&);
+    void visit_break_stmt(BreakStatementNode&);
     void visit_while_stmt(WhileStatementNode&);
     void visit_bin_expr(BinaryNode&);
     void visit_call_expr(CallNode&);
@@ -38,8 +55,8 @@ struct Resolver {
     void declare(Token&);
     void define(Token&);
 
-    void visit_var_expr(VariableNode&);
+    void visit_var_expr(ExpressionNode&);
 
     void resolve_local(ExpressionNode& expr, Token& name);
-    void resolve_function(FunctionDeclarationNode&);
+    void resolve_function(FunctionDeclarationNode&, FunctionType);
 };

@@ -226,9 +226,7 @@ std::expected<WhileStatementNode*, ParserError> Parser::parse_while_statement() 
     if (auto res = this->consume(RIGHT_PAREN, "Expect ')' after condition."); !res.has_value()) {
         return std::unexpected(res.error());
     }
-    this->loop_depth++;
     auto body = this->parse_statement();
-    this->loop_depth--;
     if (!body.has_value()) {
         return std::unexpected(body.error());
     }
@@ -272,7 +270,7 @@ std::expected<BlockStatementNode*, ParserError> Parser::parse_for_statement() {
     }
 
     ExpressionNode* increment = nullptr;
-    if (!this->check_next_token(SEMICOLON)) {
+    if (!this->check_next_token(RIGHT_PAREN)) {
         auto expr_res = this->parse_expression();
         if (!expr_res.has_value()) {
             return std::unexpected(expr_res.error());
@@ -284,9 +282,7 @@ std::expected<BlockStatementNode*, ParserError> Parser::parse_for_statement() {
         return std::unexpected(res.error());
     }
 
-    this->loop_depth++;
     auto body_exp = this->parse_statement();
-    this->loop_depth--;
     if (!body_exp.has_value()) {
         return std::unexpected(body_exp.error());
     }
@@ -312,10 +308,6 @@ std::expected<BlockStatementNode*, ParserError> Parser::parse_for_statement() {
 
 
 std::expected<BreakStatementNode*, ParserError> Parser::parse_break_statement() {
-    if (this->loop_depth == 0) {
-        this->error(this->previous(), "");
-        return std::unexpected(ParserError{});
-    }
     if (auto res = this->consume(SEMICOLON, "Expect ';' after 'break'."); !res.has_value()) {
         return std::unexpected(res.error());
     }

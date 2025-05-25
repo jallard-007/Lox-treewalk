@@ -115,7 +115,6 @@ std::optional<InterpreterSignal> Interpreter::visit_variable_declaration_node(co
         }
         value = res.value();
     }
-
     this->environment->define(stmt.name->lexeme, value);
     return std::nullopt;
 }
@@ -226,6 +225,9 @@ std::expected<Object, InterpreterSignal> Interpreter::visit_binary_expr(const Bi
                 return std::get<String>(left) + std::get<String>(right);
             }
 
+            std::cout << "l index: " << left.index() << '\n';
+            std::cout << "r index: " << right.index() << '\n';
+
             return std::unexpected(InterpreterError(InterpreterErrorType::BinOpValuesNotCompatible, *expr.oper, "Binary operator values not compatible"));
         }
 
@@ -277,19 +279,29 @@ std::expected<Object, InterpreterSignal> Interpreter::visit_binary_expr(const Bi
 }
 
 
-std::expected<Object, InterpreterSignal> Interpreter::visit_variable_expr(const VariableNode& expr) {
-    return this->environment->get(*expr.name);
+std::expected<Object, InterpreterSignal> Interpreter::visit_variable_expr(const ExpressionNode& expr) {
+    VariableNode& var_expr = *expr.get_variable_node();
+    return this->look_up_variable(*var_expr.name, &expr);
+    // return this->environment->get(*expr.name);
 }
 
 
-std::expected<Object, InterpreterSignal> Interpreter::visit_assignment_expr(const AssignmentNode& expr) {
-    auto value = this->evaluate(*expr.expr);
+std::expected<Object, InterpreterSignal> Interpreter::visit_assignment_expr(const ExpressionNode& expr) {
+    AssignmentNode& assign_node = *expr.get_assignment_node();
+    auto value = this->evaluate(*assign_node.expr);
     if (!value.has_value()) {
         return value;
     }
-    if (auto err = this->environment->assign(*expr.name, value.value()); err.has_value()) {
-        return std::unexpected(err.value());
+    if (auto l = this->locals.find(&expr); l != this->locals.end()) {
+        if (auto err = this->environment->assign_at(l->second.depth, l->second.index, value.value()); err.has_value()) {
+            return std::unexpected(err.value());
+        }
+    } else {
+        if (auto err = this->global_env->assign(*assign_node.name, value.value()); err.has_value()) {
+            return std::unexpected(err.value());
+        }
     }
+
     return value;
 }
 
@@ -349,8 +361,8 @@ std::expected<Object, InterpreterSignal> Interpreter::evaluate(const ExpressionN
         case LITERAL: return expr.get_literal_node()->value;
         case BINARYOP: return this->visit_binary_expr(*expr.get_binary_node());
         case UNARYOP: return this->visit_unary_expr(*expr.get_unary_node());
-        case VARIABLE: return this->visit_variable_expr(*expr.get_variable_node());
-        case ASSIGNMENT: return this->visit_assignment_expr(*expr.get_assignment_node());
+        case VARIABLE: return this->visit_variable_expr(expr);
+        case ASSIGNMENT: return this->visit_assignment_expr(expr);
         case LOGICAL: return this->visit_logical_expr(*expr.get_logical_node());
         case CALL: return this->visit_call_expr(*expr.get_call_node());
     }
@@ -408,4 +420,15 @@ void Interpreter::interpret(const std::span<StatementNode*>& stmts) {
 
 std::optional<InterpreterSignal> Interpreter::execute(const StatementNode& stmt) {
     return this->visit_statement_node(stmt);
+}
+
+void Interpreter::resolve(ExpressionNode* expr, int depth, int index) {
+    this->locals[expr] = LocalInfo{depth, index};
+}
+
+std::expected<Object, InterpreterSignal> Interpreter::look_up_variable(Token& tk, const ExpressionNode * expr) {
+    if (auto l = this->locals.find(expr); l != this->locals.end()) {
+        return this->environment->get_at(l->second.depth, l->second.index);
+    }
+    return this->global_env->get(tk);
 }

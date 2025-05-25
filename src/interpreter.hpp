@@ -15,9 +15,16 @@ struct ReturnSignal {
 
 using InterpreterSignal = std::variant<InterpreterError, BreakSignal, ReturnSignal>;
 
+struct LocalInfo {
+    int depth;
+    int index;
+};
+
 struct Interpreter {
     std::shared_ptr<Environment> global_env;
     std::shared_ptr<Environment> environment;
+
+    std::unordered_map<const ExpressionNode*, LocalInfo> locals;
 
     bool repl_mode = false;
 
@@ -41,8 +48,8 @@ struct Interpreter {
 
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_unary_expr(const UnaryNode&);
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_binary_expr(const BinaryNode&);
-    [[nodiscard]] std::expected<Object, InterpreterSignal> visit_variable_expr(const VariableNode&);
-    [[nodiscard]] std::expected<Object, InterpreterSignal> visit_assignment_expr(const AssignmentNode&);
+    [[nodiscard]] std::expected<Object, InterpreterSignal> visit_variable_expr(const ExpressionNode&);
+    [[nodiscard]] std::expected<Object, InterpreterSignal> visit_assignment_expr(const ExpressionNode&);
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_logical_expr(const LogicalNode&);
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_call_expr(const CallNode&);
 
@@ -53,6 +60,8 @@ struct Interpreter {
 
     void interpret(const std::span<StatementNode*>&);
 
-    void resolve(const ExpressionNode&, int);
+    void resolve(ExpressionNode*, int, int);
+
+    std::expected<Object, InterpreterSignal> look_up_variable(Token&, const ExpressionNode*);
 
 };

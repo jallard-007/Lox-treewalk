@@ -26,6 +26,7 @@ set(SOURCES
     "${SRC_DIR}/lox.cpp"
     "${SRC_DIR}/parser.cpp"
     "${SRC_DIR}/scanner.cpp"
+    "${SRC_DIR}/resolver.cpp"
     "${SRC_DIR}/token.cpp"
     "${SRC_DIR}/perfect_hash.hpp" # Force dependency on generated file
 )

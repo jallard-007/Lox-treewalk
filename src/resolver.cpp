@@ -5,7 +5,7 @@
 Resolver::Resolver(Interpreter& inter): interpreter{inter} {}
 
 
-void Resolver::block(BlockStatementNode& block) {
+void Resolver::visit_block(BlockStatementNode& block) {
     this->begin_scope();
     this->resolve(*block.stmts);
     this->end_scope();
@@ -17,6 +17,12 @@ void Resolver::begin_scope() {
 }
 
 void Resolver::end_scope() {
+    auto& s = this->scopes.back();
+    for (auto& v : s) {
+        if (!v.second.used) {
+            Lox::error(*v.second.tk, "Unused variable");
+        }
+    }
     this->scopes.pop_back();
 }
 
@@ -30,28 +36,28 @@ void Resolver::resolve(std::vector<StatementNode*>& stmts) {
 
 void Resolver::resolve(StatementNode& stmt) {
     switch (stmt.get_type()) {
-        case StatementType::PRINT: { }
-        case StatementType::EXPRESSION: { }
-        case StatementType::VARIABLE: { }
-        case StatementType::BLOCK: { }
-        case StatementType::IF: { }
-        case StatementType::WHILE: { }
-        case StatementType::BREAK: { }
-        case StatementType::RETURN: { }
-        case StatementType::FUNCTION: { }
+        case StatementType::PRINT: { this->visit_print_stmt(*stmt.get_print_statement_node()); break; }
+        case StatementType::EXPRESSION: { this->visit_expr_stmt(*stmt.get_expression_statement_node()); break; }
+        case StatementType::VARIABLE: { this->visit_var_dec_node(*stmt.get_variable_statement_node()); break; }
+        case StatementType::BLOCK: { this->visit_block(*stmt.get_block_statement_node()); break; }
+        case StatementType::IF: { this->visit_if_stmt(*stmt.get_if_statement_node()); break; }
+        case StatementType::WHILE: { this->visit_while_stmt(*stmt.get_while_statement_node()); break; }
+        case StatementType::BREAK: { this->visit_break_stmt(*stmt.get_break_statement_node()); break; }
+        case StatementType::RETURN: { this->visit_return_stmt(*stmt.get_return_statement_node()); break; }
+        case StatementType::FUNCTION: { this->visit_function_dec(stmt); break; }
     }
 }
 
 
 void Resolver::resolve(ExpressionNode& expr) {
     switch (expr.get_type()) {
-        case ExpressionType::BINARYOP: { }
-        case ExpressionType::UNARYOP: { }
-        case ExpressionType::LITERAL: { }
-        case ExpressionType::VARIABLE: { }
-        case ExpressionType::ASSIGNMENT: { }
-        case ExpressionType::LOGICAL: { }
-        case ExpressionType::CALL: { }
+        case ExpressionType::BINARYOP: { this->visit_bin_expr(*expr.get_binary_node()); break;}
+        case ExpressionType::UNARYOP: { this->visit_unary_expr(*expr.get_unary_node()); break;}
+        case ExpressionType::LITERAL: { this->visit_literal_expr(*expr.get_literal_node()); break;}
+        case ExpressionType::VARIABLE: { this->visit_var_expr(expr); break;}
+        case ExpressionType::ASSIGNMENT: { this->visit_assign_expr(expr); break;}
+        case ExpressionType::LOGICAL: { this->visit_logical_expr(*expr.get_logical_node()); break;}
+        case ExpressionType::CALL: { this->visit_call_expr(*expr.get_call_node()); break;}
     }
 }
 
@@ -69,55 +75,72 @@ void Resolver::declare(Token& tk) {
     if (this->scopes.empty()) {
         return;
     }
-    this->scopes.back()[std::string(tk.lexeme)] = false;
+    auto& scope = this->scopes.back();
+    bool contains = scope.contains(tk.lexeme);
+    auto& v = scope[std::string(tk.lexeme)] = VarInfo{false, false, &tk};
+    if (contains) {
+        Lox::error(tk, "Already a variable with this name in this scope.");
+    } else {
+        v.index = scope.size() - 1;
+    }
 }
 
 
 void Resolver::define(Token& tk) {
+    if (this->scopes.empty()) return;
+
     auto& s = this->scopes.back();
     auto d = s.find(tk.lexeme);
     if (d == s.end()) {
         throw std::runtime_error("Variable defined but not declared");
     }
-    d->second = true;
+    d->second.defined = true;
 }
 
 
-void Resolver::visit_var_expr(VariableNode& var_expr) {
+void Resolver::visit_var_expr(ExpressionNode& expr) {
+    VariableNode& var_expr = *expr.get_variable_node();
     if (!this->scopes.empty()) {
         auto& s = this->scopes.back();
         auto d = s.find(var_expr.name->lexeme);
-        if (d != s.end() && d->second == false) {
-            Lox::error(*var_expr.name, "Can't read local variable in its own initializer.");
+        if (d != s.end()) {
+            if (d->second.defined == false) {
+                Lox::error(*var_expr.name, "Can't read local variable in its own initializer.");
+            } else {
+                d->second.used = true;
+            }
         }
     }
-    ExpressionNode t {&const_cast<VariableNode&>(var_expr)};
-    this->resolve_local(t, *var_expr.name);
+
+    this->resolve_local(expr, *var_expr.name);
 }
 
 
 void Resolver::resolve_local(ExpressionNode& expr, Token& name) {
     for (int i = this->scopes.size() - 1; i >= 0; i--) {
-        if (this->scopes[i].contains(name.lexeme)) {
-            this->interpreter.resolve(expr, this->scopes.size() - 1 - i);
+        if (auto v = this->scopes[i].find(name.lexeme); v != this->scopes[i].end()) {
+            this->interpreter.resolve(&expr, this->scopes.size() - 1 - i, v->second.index);
             return;
         }
     }
 }
 
-void Resolver::visit_assign_expr(AssignmentNode& expr) {
-    ExpressionNode t {&expr};
-    this->resolve(*expr.expr);
-    this->resolve_local(t, *expr.name);
+void Resolver::visit_assign_expr(ExpressionNode& expr) {
+    AssignmentNode& assign_expr = *expr.get_assignment_node();
+    this->resolve(*assign_expr.expr);
+    this->resolve_local(expr, *assign_expr.name);
 }
 
-void Resolver::visit_function_dec(FunctionDeclarationNode& func_dec) {
+void Resolver::visit_function_dec(StatementNode& stmt) {
+    FunctionDeclarationNode& func_dec = *stmt.get_function_declaration_node();
     this->declare(*func_dec.name);
     this->define(*func_dec.name);
-    this->resolve_function(func_dec);
+    this->resolve_function(func_dec, FunctionType::FUNCTION);
 }
 
-void Resolver::resolve_function(FunctionDeclarationNode& func_dec) {
+void Resolver::resolve_function(FunctionDeclarationNode& func_dec, FunctionType type) {
+    FunctionType enclosing_func = this->current_function;
+    this->current_function = type;
     this->begin_scope();
     if (func_dec.params){
         for (auto& p : *func_dec.params) {
@@ -125,9 +148,9 @@ void Resolver::resolve_function(FunctionDeclarationNode& func_dec) {
             this->define(*p);
         }
     }
-    StatementNode s {func_dec.body};
-    this->resolve(s);
+    this->resolve(*func_dec.body->stmts);
     this->end_scope();
+    this->current_function = enclosing_func;
 }
 
 
@@ -151,15 +174,27 @@ void Resolver::visit_print_stmt(PrintStatementNode& stmt) {
 
 
 void Resolver::visit_return_stmt(ReturnStatementNode& stmt) {
+    if (this->current_function == FunctionType::NONE) {
+        Lox::error(*stmt.rt, "Can't return from top-level code.");
+    }
     if (stmt.expr)
         this->resolve(*stmt.expr);
+}
+
+
+void Resolver::visit_break_stmt(BreakStatementNode& br) {
+    if (this->loop_depth == 0) {
+        Lox::error(*br.tk, "Can't use 'break' outside of loop");
+    }
 }
 
 
 void Resolver::visit_while_stmt(WhileStatementNode& stmt) {
     if (stmt.condition)
         this->resolve(*stmt.condition);
+    this->loop_depth++;
     this->resolve(*stmt.body);
+    this->loop_depth--;
 }
 
 
