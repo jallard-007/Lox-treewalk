@@ -362,6 +362,7 @@ std::expected<Object, InterpreterSignal> Interpreter::evaluate(const ExpressionN
 bool Interpreter::is_truthy(const Object& v) const {
     if (std::holds_alternative<None>(v)) return false;
     if (std::holds_alternative<bool>(v)) return std::get<bool>(v);
+    if (std::holds_alternative<Number>(v)) return bool(std::get<Number>(v));
     return true;
 }
 

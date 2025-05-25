@@ -52,4 +52,7 @@ struct Interpreter {
     bool is_equal(const Object&, const Object&) const;
 
     void interpret(const std::span<StatementNode*>&);
+
+    void resolve(const ExpressionNode&, int);
+
 };
