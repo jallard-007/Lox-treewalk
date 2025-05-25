@@ -15,7 +15,7 @@ bool is_digit(char c) {
 
 
 bool is_alpha(char c) {
-    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
 
@@ -112,7 +112,7 @@ void Scanner::handle_string() {
     // Trim the surrounding quotes.
     auto size = (this->current - 1) - (this->start + 1);
     std::string_view v = this->program.substr(start + 1, size);
-    this->add_token(STRING, std::string(v));
+    this->add_token(STRING, std::make_shared<std::string>(v));
 }
 
 void Scanner::handle_number() {

@@ -27,6 +27,7 @@ struct Parser {
 
     [[nodiscard]] std::expected<VariableDeclarationNode*, ParserError> parse_variable_declaration();
     [[nodiscard]] std::expected<FunctionDeclarationNode*, ParserError> parse_function_declaration(std::string_view);
+    [[nodiscard]] std::expected<ClassDeclarationNode*, ParserError> parse_class_declaration();
 
     [[nodiscard]] std::expected<StatementNode*, ParserError> parse_statement();
     [[nodiscard]] std::expected<PrintStatementNode*, ParserError> parse_print_statement();

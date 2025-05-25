@@ -5,12 +5,14 @@
 #include <array>
 #include <utility>
 #include <variant>
+#include <memory>
 #include <string_view>
 #include <string>
 #include <iostream>
 
 
 enum class TokenType: uint8_t {
+    NONE,
     AND,
     BANG_EQUAL,
     BANG,
@@ -60,11 +62,12 @@ struct None {
 };
 
 using Number = double;
-using String = std::string;
+using String = std::shared_ptr<std::string>;
 
-struct LoxCallable;
+class LoxCallable;
+struct LoxInstance;
 
-using Object = std::variant<None, Number, String, bool, std::shared_ptr<LoxCallable>>;
+using Object = std::variant<None, Number, String, bool, std::shared_ptr<LoxCallable>, std::shared_ptr<LoxInstance>>;
 
 struct Token {
     TokenType type = TokenType::AND;
@@ -81,6 +84,7 @@ std::ostream& operator<<(std::ostream& os, const TokenType& v);
 
 
 constexpr std::array<const char *, std::to_underlying(TokenType::_COUNT)> token_map = {
+    "none",
     "and",
     "bang_equal",
     "bang",

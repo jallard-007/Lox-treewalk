@@ -5,7 +5,7 @@ std::ostream& operator<<(std::ostream& os, const Token& t) {
 }
 
 
-std::ostream& operator<<(std::ostream& os, const None& t) {
+std::ostream& operator<<(std::ostream& os, const None&) {
     return os << "None";
 }
 

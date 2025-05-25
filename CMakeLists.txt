@@ -24,6 +24,7 @@ set(SOURCES
     "${SRC_DIR}/interpreter.cpp"
     "${SRC_DIR}/environment.cpp"
     "${SRC_DIR}/lox.cpp"
+    "${SRC_DIR}/lox_class.cpp"
     "${SRC_DIR}/parser.cpp"
     "${SRC_DIR}/scanner.cpp"
     "${SRC_DIR}/resolver.cpp"
@@ -39,3 +40,10 @@ add_dependencies(lox perfect_hash_gen)
 
 # Alias the custom command so CMake tracks the output
 add_custom_target(perfect_hash_gen DEPENDS ${SRC_DIR}/perfect_hash.hpp)
+
+target_compile_options(
+    lox 
+    PRIVATE # or PUBLIC/INTERFACE depending on visibility needs
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror> # Example for C++
+    $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra> # Example for C
+)

@@ -19,7 +19,8 @@ void Resolver::begin_scope() {
 void Resolver::end_scope() {
     auto& s = this->scopes.back();
     for (auto& v : s) {
-        if (!v.second.used) {
+        // tk might not be set, 'this' keyword
+        if (v.second.tk && !v.second.used) {
             Lox::error(*v.second.tk, "Unused variable");
         }
     }
@@ -45,6 +46,7 @@ void Resolver::resolve(StatementNode& stmt) {
         case StatementType::BREAK: { this->visit_break_stmt(*stmt.get_break_statement_node()); break; }
         case StatementType::RETURN: { this->visit_return_stmt(*stmt.get_return_statement_node()); break; }
         case StatementType::FUNCTION: { this->visit_function_dec(stmt); break; }
+        case StatementType::CLASS: { this->visit_class_dec(*stmt.get_class_declaration_node()); break; }
     }
 }
 
@@ -58,6 +60,9 @@ void Resolver::resolve(ExpressionNode& expr) {
         case ExpressionType::ASSIGNMENT: { this->visit_assign_expr(expr); break;}
         case ExpressionType::LOGICAL: { this->visit_logical_expr(*expr.get_logical_node()); break;}
         case ExpressionType::CALL: { this->visit_call_expr(*expr.get_call_node()); break;}
+        case ExpressionType::GET: { this->visit_get_expr(*expr.get_get_node()); break;}
+        case ExpressionType::SET: { this->visit_set_expr(*expr.get_set_node()); break;}
+        case ExpressionType::THIS: { this->visit_this_expr(expr); break;}
     }
 }
 
@@ -77,7 +82,7 @@ void Resolver::declare(Token& tk) {
     }
     auto& scope = this->scopes.back();
     bool contains = scope.contains(tk.lexeme);
-    auto& v = scope[std::string(tk.lexeme)] = VarInfo{false, false, &tk};
+    auto& v = scope[std::string(tk.lexeme)] = VarInfo{false, false, &tk, 0};
     if (contains) {
         Lox::error(tk, "Already a variable with this name in this scope.");
     } else {
@@ -135,7 +140,30 @@ void Resolver::visit_function_dec(StatementNode& stmt) {
     FunctionDeclarationNode& func_dec = *stmt.get_function_declaration_node();
     this->declare(*func_dec.name);
     this->define(*func_dec.name);
-    this->resolve_function(func_dec, FunctionType::FUNCTION);
+    FunctionType f_type = FunctionType::FUNCTION;
+
+    this->resolve_function(func_dec, f_type);
+}
+
+void Resolver::visit_class_dec(ClassDeclarationNode& stmt) {
+    ClassType enclosing_class_type = this->current_class;
+    this->current_class = ClassType::CLASS;
+    this->declare(*stmt.name);
+    this->define(*stmt.name);
+
+    this->begin_scope();
+    this->scopes.back()["this"] = VarInfo{true, false, nullptr, 0};
+
+    for (auto& method : *stmt.methods) {
+        FunctionType f_type = FunctionType::METHOD;
+        if (method->name->lexeme == "init") {
+            f_type = FunctionType::INITIALIZER;
+        }
+        this->resolve_function(*method, f_type);
+    }
+
+    this->end_scope();
+    this->current_class = enclosing_class_type;
 }
 
 void Resolver::resolve_function(FunctionDeclarationNode& func_dec, FunctionType type) {
@@ -177,8 +205,13 @@ void Resolver::visit_return_stmt(ReturnStatementNode& stmt) {
     if (this->current_function == FunctionType::NONE) {
         Lox::error(*stmt.rt, "Can't return from top-level code.");
     }
-    if (stmt.expr)
+    if (stmt.expr) {
+        if (this->current_function == FunctionType::INITIALIZER) {
+            Lox::error(*stmt.rt, "Can't return a value from an initializer.");
+        }
         this->resolve(*stmt.expr);
+    }
+
 }
 
 
@@ -211,6 +244,23 @@ void Resolver::visit_call_expr(CallNode& expr) {
             this->resolve(*v);
         }
     }
+}
+
+void Resolver::visit_get_expr(GetNode& expr) {
+    this->resolve(*expr.object);
+}
+
+void Resolver::visit_set_expr(SetNode& expr) {
+    this->resolve(*expr.value);
+    this->resolve(*expr.object);
+}
+
+void Resolver::visit_this_expr(ExpressionNode& expr) {
+    if (this->current_class == ClassType::NONE) {
+        Lox::error(*expr.get_this_node()->tk, "Can't use 'this' outside of a class.");
+        return;
+    }
+    this->resolve_local(expr, *expr.get_this_node()->tk);
 }
 
 

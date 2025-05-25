@@ -10,7 +10,14 @@
 
 enum class FunctionType {
     NONE,
-    FUNCTION
+    FUNCTION,
+    METHOD,
+    INITIALIZER,
+};
+
+enum class ClassType {
+    NONE,
+    CLASS,
 };
 
 
@@ -25,6 +32,7 @@ struct Resolver {
     Interpreter& interpreter;
     std::vector<std::unordered_map<std::string, VarInfo, string_hash, std::equal_to<>>> scopes;
     FunctionType current_function = FunctionType::NONE;
+    ClassType current_class = ClassType::NONE;
     uint32_t loop_depth = 0;
 
     Resolver(Interpreter&);
@@ -39,6 +47,7 @@ struct Resolver {
     void visit_var_dec_node(VariableDeclarationNode&);
     void visit_assign_expr(ExpressionNode&);
     void visit_function_dec(StatementNode&);
+    void visit_class_dec(ClassDeclarationNode&);
 
     void visit_expr_stmt(ExpressionStatementNode&);
     void visit_if_stmt(IfStatementNode&);
@@ -48,6 +57,9 @@ struct Resolver {
     void visit_while_stmt(WhileStatementNode&);
     void visit_bin_expr(BinaryNode&);
     void visit_call_expr(CallNode&);
+    void visit_get_expr(GetNode&);
+    void visit_set_expr(SetNode&);
+    void visit_this_expr(ExpressionNode&);
     void visit_literal_expr(LiteralNode&);
     void visit_logical_expr(LogicalNode&);
     void visit_unary_expr(UnaryNode&);

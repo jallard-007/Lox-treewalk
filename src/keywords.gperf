@@ -7,7 +7,7 @@
 %define lookup-function-name lookup_keyword
 %define slot-name name
 
-struct KeywordEntry { const char* name; TokenType token; };
+struct KeywordEntry { const char* name; TokenType token = TokenType::NONE; };
 
 %%
 and, TokenType::AND

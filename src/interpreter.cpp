@@ -1,6 +1,8 @@
 #include <optional>
 #include "interpreter.hpp"
 #include "lox_callable.hpp"
+#include "lox_class.hpp"
+#include "lox_instance.hpp"
 #include "lox_builtins.hpp"
 #include "lox.hpp"
 
@@ -20,7 +22,11 @@ std::string stringify(const Object& v) {
         } else if constexpr (std::is_same_v<T, bool>) {
             return vs ? "true" : "false";
         } else if constexpr (std::is_same_v<T, String>) {
-            return vs;
+            return *vs;
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<LoxCallable>>) {
+            return vs->to_string();
+        } else if constexpr (std::is_same_v<T, std::shared_ptr<LoxInstance>>) {
+            return vs->to_string();
         } else {
             return "STRINGIFY ERROR: Invalid Token Value!";
         }
@@ -58,6 +64,7 @@ std::optional<InterpreterSignal> Interpreter::visit_statement_node(const Stateme
         case BREAK: return this->visit_break_statement_node(*stmt.get_break_statement_node());
         case RETURN: return this->visit_return_statement_node(*stmt.get_return_statement_node());
         case FUNCTION: return this->visit_function_declaration_node(*stmt.get_function_declaration_node());
+        case CLASS: return this->visit_class_declaration_node(*stmt.get_class_declaration_node());
     }
     return InterpreterError(InterpreterErrorType::Unimplemented, "Statement type not implemented");
 }
@@ -173,10 +180,21 @@ InterpreterSignal Interpreter::visit_return_statement_node(const ReturnStatement
 }
 
 std::optional<InterpreterSignal> Interpreter::visit_function_declaration_node(const FunctionDeclarationNode& func) {
-    this->environment->define(func.name->lexeme, std::make_shared<LoxFunction>(func, this->environment));
+    this->environment->define(func.name->lexeme, None());
+    this->environment->assign(*func.name, std::make_shared<LoxFunction>(func, this->environment, false));
     return std::nullopt;
 }
 
+
+std::optional<InterpreterSignal> Interpreter::visit_class_declaration_node(const ClassDeclarationNode& class_) {
+    this->environment->define(class_.name->lexeme, None());
+    std::unordered_map<std::string, std::shared_ptr<LoxFunction>, string_hash, std::equal_to<>> methods;
+    for (auto& method : *class_.methods) {
+        methods[std::string(method->name->lexeme)] = std::make_shared<LoxFunction>(*method, this->environment, method->name->lexeme == "init");
+    }
+    this->environment->assign(*class_.name, std::make_shared<LoxClass>(class_.name->lexeme, std::move(methods)));
+    return std::nullopt;
+}
 
 std::expected<Object, InterpreterSignal> Interpreter::visit_unary_expr(const UnaryNode& expr) {
     auto right_exp = this->evaluate(*expr.operand);
@@ -222,11 +240,8 @@ std::expected<Object, InterpreterSignal> Interpreter::visit_binary_expr(const Bi
             } 
 
             if (std::holds_alternative<String>(left) && std::holds_alternative<String>(right)) {
-                return std::get<String>(left) + std::get<String>(right);
+                return std::make_shared<std::string>(*std::get<String>(left) + *std::get<String>(right));
             }
-
-            std::cout << "l index: " << left.index() << '\n';
-            std::cout << "r index: " << right.index() << '\n';
 
             return std::unexpected(InterpreterError(InterpreterErrorType::BinOpValuesNotCompatible, *expr.oper, "Binary operator values not compatible"));
         }
@@ -355,6 +370,38 @@ std::expected<Object, InterpreterSignal> Interpreter::visit_call_expr(const Call
 }
 
 
+std::expected<Object, InterpreterSignal> Interpreter::visit_get_expr(const GetNode& expr) {
+    auto obj = this->evaluate(*expr.object);
+    if (!obj.has_value()) {
+        return std::unexpected(obj.error());
+    }
+    if (!std::holds_alternative<std::shared_ptr<LoxInstance>>(obj.value())) {
+        return std::unexpected(InterpreterError{InterpreterErrorType::NotInstance, *expr.name, "Only instances have properties"});
+    }
+    return std::get<std::shared_ptr<LoxInstance>>(obj.value())->get(*expr.name);
+}
+
+std::expected<Object, InterpreterSignal> Interpreter::visit_set_expr(const SetNode& expr) {
+    auto obj = this->evaluate(*expr.object);
+    if (!obj.has_value()) {
+        return obj;
+    }
+    if (!std::holds_alternative<std::shared_ptr<LoxInstance>>(obj.value())) {
+        return std::unexpected(InterpreterError{InterpreterErrorType::NotInstance, *expr.name, "Only instances have fields"});
+    }
+    auto val = this->evaluate(*expr.value);
+    if (!val.has_value()) {
+        return val;
+    }
+    std::get<std::shared_ptr<LoxInstance>>(obj.value())->set(*expr.name, val.value()); 
+    return val.value();
+}
+
+std::expected<Object, InterpreterSignal> Interpreter::visit_this_expr(const ExpressionNode& expr) {
+    return this->look_up_variable(*expr.get_this_node()->tk, &expr);
+}
+
+
 std::expected<Object, InterpreterSignal> Interpreter::evaluate(const ExpressionNode& expr) {
     using enum ExpressionType;
     switch (expr.get_type()) {
@@ -365,6 +412,9 @@ std::expected<Object, InterpreterSignal> Interpreter::evaluate(const ExpressionN
         case ASSIGNMENT: return this->visit_assignment_expr(expr);
         case LOGICAL: return this->visit_logical_expr(*expr.get_logical_node());
         case CALL: return this->visit_call_expr(*expr.get_call_node());
+        case GET: return this->visit_get_expr(*expr.get_get_node());
+        case SET: return this->visit_set_expr(*expr.get_set_node());
+        case THIS: return this->visit_this_expr(expr);
     }
 
     return std::unexpected(InterpreterError(InterpreterErrorType::Unimplemented, "Expression type not implemented"));

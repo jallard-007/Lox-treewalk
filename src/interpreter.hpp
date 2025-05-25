@@ -45,6 +45,7 @@ struct Interpreter {
     [[nodiscard]] BreakSignal visit_break_statement_node(const BreakStatementNode&) const;
     [[nodiscard]] InterpreterSignal visit_return_statement_node(const ReturnStatementNode&);
     [[nodiscard]] std::optional<InterpreterSignal> visit_function_declaration_node(const FunctionDeclarationNode&);
+    [[nodiscard]] std::optional<InterpreterSignal> visit_class_declaration_node(const ClassDeclarationNode&);
 
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_unary_expr(const UnaryNode&);
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_binary_expr(const BinaryNode&);
@@ -52,6 +53,9 @@ struct Interpreter {
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_assignment_expr(const ExpressionNode&);
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_logical_expr(const LogicalNode&);
     [[nodiscard]] std::expected<Object, InterpreterSignal> visit_call_expr(const CallNode&);
+    [[nodiscard]] std::expected<Object, InterpreterSignal> visit_get_expr(const GetNode&);
+    [[nodiscard]] std::expected<Object, InterpreterSignal> visit_set_expr(const SetNode&);
+    [[nodiscard]] std::expected<Object, InterpreterSignal> visit_this_expr(const ExpressionNode&);
 
     [[nodiscard]] std::optional<InterpreterSignal> print_expression(const ExpressionNode&);
 

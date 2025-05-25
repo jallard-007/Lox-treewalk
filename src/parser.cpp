@@ -30,6 +30,11 @@ StatementNode* Parser::parse_declaration() {
 
 
 std::expected<StatementNode*, ParserError> Parser::parse_declaration2() {
+    if (this->match_token({{CLASS}})) {
+        auto res = this->parse_class_declaration();
+        if (!res.has_value()) { return std::unexpected(res.error()); }
+        return this->allocator.create<StatementNode>(res.value());
+    }
     if (this->match_token({{FUN}})) {
         auto res = this->parse_function_declaration("function");
         if (!res.has_value()) { return std::unexpected(res.error()); }
@@ -103,6 +108,31 @@ std::expected<FunctionDeclarationNode*, ParserError> Parser::parse_function_decl
     return this->allocator.create<FunctionDeclarationNode>(name.value(), params, body.value());
 }
 
+
+std::expected<ClassDeclarationNode*, ParserError> Parser::parse_class_declaration() {
+    auto name = this->consume(IDENTIFIER, "Expect class name.");
+    if (!name.has_value()) {
+        return std::unexpected(name.error());
+    }
+    if (auto res = consume(LEFT_BRACE, "Expect '{' before class body."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+
+    auto methods = this->allocator.create<std::vector<FunctionDeclarationNode*>>();
+    while (!this->check_next_token(RIGHT_BRACE) && !this->is_at_end()) {
+        auto method = this->parse_function_declaration("method");
+        if (!method.has_value()) {
+            return std::unexpected(method.error());
+        }
+        methods->push_back(method.value());
+    }
+
+    if (auto res = consume(RIGHT_BRACE, "Expect '}' after class body."); !res.has_value()) {
+        return std::unexpected(res.error());
+    }
+
+    return this->allocator.create<ClassDeclarationNode>(name.value(), methods);
+}
 
 std::expected<StatementNode*, ParserError> Parser::parse_statement() {
     if (this->match_token({{FOR}})) {
@@ -351,6 +381,10 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_assignment() {
         if (expr.value()->get_type() == ExpressionType::VARIABLE) {
             Token* name = expr.value()->get_variable_node()->name;
             return this->allocator.create<ExpressionNode>(this->allocator.create<AssignmentNode>(name, value.value()));
+        } else if (expr.value()->get_type() == ExpressionType::GET) {
+            auto get_node = expr.value()->get_get_node();
+            Token* name = get_node->name;
+            return this->allocator.create<ExpressionNode>(this->allocator.create<SetNode>(get_node->object, name, value.value()));
         }
 
         this->error(equals, "Invalid assignment target."); 
@@ -494,12 +528,20 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_call() {
     ExpressionNode* expr = expr_exp.value();
     while (true) { 
         if (this->match_token({{LEFT_PAREN}})) {
-            auto res = this->finish_call(*expr);
-            if (!res.has_value()) {
+            if (auto res = this->finish_call(*expr); !res.has_value()) {
                 return res;
+            } else {
+                expr = res.value();
             }
-            expr = res.value();
-        } else {
+        }
+        else if (this->match_token({{DOT}})) {
+            auto name = this->consume(IDENTIFIER, "Expect property name after '.'.");
+            if (!name.has_value()) {
+                return std::unexpected(name.error());
+            }
+            expr = this->allocator.create<ExpressionNode>(this->allocator.create<GetNode>(expr, name.value()));
+        }
+        else {
             break;
         }
     }
@@ -541,6 +583,9 @@ std::expected<ExpressionNode*, ParserError> Parser::parse_primary() {
 
     if (this->match_token({{NUMBER, STRING}})) {
         return this->allocator.create<ExpressionNode>(this->allocator.create<LiteralNode>(this->previous().val));
+    }
+    if (this->match_token({{THIS}})) {
+        return this->allocator.create<ExpressionNode>(this->allocator.create<ThisNode>(&this->previous()));
     }
 
     if (this->match_token({{IDENTIFIER}})) {

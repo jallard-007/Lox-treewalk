@@ -1,14 +1,10 @@
-fun inc(i) {
-  return i + 1;
+class Cake {
+  taste() {
+    var adjective = "delicious";
+    print "The " + this.flavor + " cake is " + adjective + "!";
+  }
 }
 
-fun bar() {
-    var i = 0;
-    fun foobar() {
-        var j = 0;
-    }
-    foobar();
-    print j;
-}
-
-bar();
+var cake = Cake();
+cake.flavor = "German chocolate";
+cake.taste(); // Prints "The German chocolate cake is delicious!".

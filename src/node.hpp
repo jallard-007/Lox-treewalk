@@ -8,9 +8,9 @@
 #include "tagged_ptr.hpp"
 #include "allocator.hpp"
 
-constexpr uint64_t EXPRESSION_NODE_ALIGNMENT_REQ = 8;
+constexpr uint64_t EXPRESSION_NODE_ALIGNMENT_REQ = 16;
 
-struct ExpressionNode;
+class ExpressionNode;
 
 struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) LiteralNode {
     Object value;
@@ -55,7 +55,23 @@ struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) CallNode {
 };
 
 
-constexpr uint8_t expression_mask = 0b111;
+struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) GetNode {
+    ExpressionNode* object {};
+    Token* name {};
+};
+
+
+struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) SetNode {
+    ExpressionNode* object {};
+    Token* name {};
+    ExpressionNode* value {};
+};
+
+struct alignas(EXPRESSION_NODE_ALIGNMENT_REQ) ThisNode {
+    Token* tk {};
+};
+
+constexpr uint8_t expression_mask = 0b1111;
 enum class ExpressionType : uint8_t {
     BINARYOP,
     UNARYOP,
@@ -64,8 +80,11 @@ enum class ExpressionType : uint8_t {
     ASSIGNMENT,
     LOGICAL,
     CALL,
+    GET,
+    SET,
+    THIS,
 
-    _LAST = CALL
+    _LAST = THIS
 };
 static_assert(std::to_underlying(ExpressionType::_LAST) <= expression_mask);
 
@@ -81,6 +100,9 @@ public:
     explicit ExpressionNode(AssignmentNode* v) { this->set_<AssignmentNode>(v); }
     explicit ExpressionNode(LogicalNode* v) { this->set_<LogicalNode>(v); }
     explicit ExpressionNode(CallNode* v) { this->set_<CallNode>(v); }
+    explicit ExpressionNode(GetNode* v) { this->set_<GetNode>(v); }
+    explicit ExpressionNode(SetNode* v) { this->set_<SetNode>(v); }
+    explicit ExpressionNode(ThisNode* v) { this->set_<ThisNode>(v); }
 
     ExpressionType get_type() const { return tagged.get_tag(); }
 
@@ -91,6 +113,9 @@ public:
     AssignmentNode* get_assignment_node() const { return this->get<AssignmentNode>(); }
     LogicalNode* get_logical_node() const { return this->get<LogicalNode>(); }
     CallNode* get_call_node() const { return this->get<CallNode>(); }
+    GetNode* get_get_node() const { return this->get<GetNode>(); }
+    SetNode* get_set_node() const { return this->get<SetNode>(); }
+    ThisNode* get_this_node() const { return this->get<ThisNode>(); }
 
     void set(BinaryNode* v) { return this->set_<BinaryNode>(v); }
     void set(UnaryNode* v) { return this->set_<UnaryNode>(v); }
@@ -99,6 +124,9 @@ public:
     void set(AssignmentNode* v) { return this->set_<AssignmentNode>(v); }
     void set(LogicalNode* v) { return this->set_<LogicalNode>(v); }
     void set(CallNode* v) { return this->set_<CallNode>(v); }
+    void set(GetNode* v) { return this->set_<GetNode>(v); }
+    void set(SetNode* v) { return this->set_<SetNode>(v); }
+    void set(ThisNode* v) { return this->set_<ThisNode>(v); }
 
 private:
     template<typename T>
@@ -122,6 +150,9 @@ template<> constexpr ExpressionType ExpressionNode::get_type_for<VariableNode>()
 template<> constexpr ExpressionType ExpressionNode::get_type_for<AssignmentNode>() { return ExpressionType::ASSIGNMENT; }
 template<> constexpr ExpressionType ExpressionNode::get_type_for<LogicalNode>() { return ExpressionType::LOGICAL; }
 template<> constexpr ExpressionType ExpressionNode::get_type_for<CallNode>() { return ExpressionType::CALL; }
+template<> constexpr ExpressionType ExpressionNode::get_type_for<GetNode>() { return ExpressionType::GET; }
+template<> constexpr ExpressionType ExpressionNode::get_type_for<SetNode>() { return ExpressionType::SET; }
+template<> constexpr ExpressionType ExpressionNode::get_type_for<ThisNode>() { return ExpressionType::THIS; }
 
 
 constexpr uint64_t STATEMENT_NODE_ALIGNMENT_REQ = 16;
@@ -181,6 +212,12 @@ struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) FunctionDeclarationNode {
 };
 
 
+struct alignas(STATEMENT_NODE_ALIGNMENT_REQ) ClassDeclarationNode {
+    Token* name;
+    std::vector<FunctionDeclarationNode*>* methods;
+};
+
+
 constexpr uint8_t statement_mask = 0b1111;
 enum class StatementType {
     PRINT,
@@ -192,8 +229,9 @@ enum class StatementType {
     BREAK,
     RETURN,
     FUNCTION,
+    CLASS,
 
-    _LAST = FUNCTION
+    _LAST = CLASS
 };
 static_assert(std::to_underlying(StatementType::_LAST) <= statement_mask);
 
@@ -212,6 +250,7 @@ public:
     explicit StatementNode(BreakStatementNode* v) { this->set_<BreakStatementNode>(v); }
     explicit StatementNode(ReturnStatementNode* v) { this->set_<ReturnStatementNode>(v); }
     explicit StatementNode(FunctionDeclarationNode* v) { this->set_<FunctionDeclarationNode>(v); }
+    explicit StatementNode(ClassDeclarationNode* v) { this->set_<ClassDeclarationNode>(v); }
 
     StatementType get_type() const { return tagged.get_tag(); }
 
@@ -224,6 +263,7 @@ public:
     BreakStatementNode* get_break_statement_node() const { return this->get<BreakStatementNode>(); }
     ReturnStatementNode* get_return_statement_node() const { return this->get<ReturnStatementNode>(); }
     FunctionDeclarationNode* get_function_declaration_node() const { return this->get<FunctionDeclarationNode>(); }
+    ClassDeclarationNode* get_class_declaration_node() const { return this->get<ClassDeclarationNode>(); }
 
     void set(PrintStatementNode* v) { return this->set_<PrintStatementNode>(v); }
     void set(ExpressionStatementNode* v) { return this->set_<ExpressionStatementNode>(v); }
@@ -234,6 +274,7 @@ public:
     void set(BreakStatementNode* v) { return this->set_<BreakStatementNode>(v); }
     void set(ReturnStatementNode* v) { return this->set_<ReturnStatementNode>(v); }
     void set(FunctionDeclarationNode* v) { return this->set_<FunctionDeclarationNode>(v); }
+    void set(ClassDeclarationNode* v) { return this->set_<ClassDeclarationNode>(v); }
 
 private:
     template<typename T>
@@ -258,6 +299,7 @@ template<> constexpr StatementType StatementNode::get_type_for<WhileStatementNod
 template<> constexpr StatementType StatementNode::get_type_for<BreakStatementNode>() { return StatementType::BREAK; }
 template<> constexpr StatementType StatementNode::get_type_for<ReturnStatementNode>() { return StatementType::RETURN; }
 template<> constexpr StatementType StatementNode::get_type_for<FunctionDeclarationNode>() { return StatementType::FUNCTION; }
+template<> constexpr StatementType StatementNode::get_type_for<ClassDeclarationNode>() { return StatementType::CLASS; }
 
 
 struct Program {

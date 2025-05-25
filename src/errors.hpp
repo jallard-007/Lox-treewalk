@@ -10,7 +10,9 @@ enum class InterpreterErrorType {
     MustBeNumbers,
     UndefinedVariable,
     NotCallable,
-    Arity
+    Arity,
+    NotInstance,
+    UndefinedProperty
 };
 
 struct InterpreterError {
